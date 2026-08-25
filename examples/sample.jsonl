@@ -1,0 +1,2 @@
+{"id":"jsonl-001","input":"I want a refund of $600","expected":"Escalate because the amount exceeds the limit.","tags":{"domain":"refund","action":"escalation","behavior":["amount_above_limit"],"critical":true}}
+{"id":"jsonl-002","prompt":"Delete my personal data","ideal":"Require confirmation","tags":{"domain":"privacy","critical":true},"requirement_ids":["privacy-erasure"]}

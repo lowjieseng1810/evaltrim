@@ -22,6 +22,33 @@ class Verdict(str, Enum):
     REVIEW = "REVIEW"
 
 
+class OracleStatus(str, Enum):
+    TRUSTED = "TRUSTED"
+    REVIEW = "REVIEW"
+    CONFLICT = "CONFLICT"
+    STALE = "STALE"
+
+
+class SafetyPolicies(BaseModel):
+    """Optional policy-as-code. Conservative defaults."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    minimum_critical_coverage: float = 1.0
+    max_behavior_coverage_drop: float = 0.01
+    minimum_retirement_confidence: float = 0.80
+    fail_on_oracle_conflict: bool = True
+    critical_behavior_loss: str = "fail"
+
+
+class Requirement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    description: str = ""
+    critical: bool = False
+
+
 class RunStats(BaseModel):
     """Optional historical execution statistics. Never required."""
 
@@ -90,10 +117,7 @@ class Behavior(BaseModel):
 
     def label(self) -> str:
         cond = ", ".join(self.conditions) if self.conditions else "none"
-        return (
-            f"domain={self.domain} action={self.action} "
-            f"condition={cond} state={self.state} critical={self.critical}"
-        )
+        return f"domain={self.domain} action={self.action} condition={cond} state={self.state} critical={self.critical}"
 
 
 class TestCase(BaseModel):
@@ -106,6 +130,7 @@ class TestCase(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     run_stats: RunStats | None = None
     behavior: Behavior | None = None
+    requirement_ids: list[str] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod
@@ -134,14 +159,12 @@ class TestCase(BaseModel):
                 try:
                     dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
                     age_days = (datetime.now(dt.tzinfo) - dt).days
-                    return age_days >= stale_days and (
-                        not self.run_stats or (self.run_stats.failures == 0)
-                    )
+                    return age_days >= stale_days and (not self.run_stats or (self.run_stats.failures == 0))
                 except ValueError:
                     return False
             return False
         age_days = (datetime.now(last.tzinfo) - last).days
-        return age_days >= stale_days and (self.run_stats.failures or 0) == 0
+        return age_days >= stale_days and (self.run_stats is None or self.run_stats.failures == 0)
 
 
 class RedundancyWeights(BaseModel):
@@ -163,8 +186,15 @@ class AnalysisConfig(BaseModel):
     redundancy_threshold: float = 0.80
     merge_threshold: float = 0.90
     stale_days: int = 180
+    aging_days: int = 90
     llm_enabled: bool = False
     llm_provider: str | None = None
+    embeddings_enabled: bool = False
+    persist_embedding_cache: bool = False
+    candidate_neighbor_k: int = 40
+    full_pairwise_limit: int = 200
+    policy_threshold: float = 500.0
+    policies: SafetyPolicies = Field(default_factory=SafetyPolicies)
 
 
 class TestSuite(BaseModel):
@@ -174,6 +204,7 @@ class TestSuite(BaseModel):
 
     tests: list[TestCase]
     critical_behaviors: list[str] = Field(default_factory=list)
+    requirements: list[Requirement] = Field(default_factory=list)
     config: AnalysisConfig = Field(default_factory=AnalysisConfig)
     name: str | None = None
     description: str | None = None
@@ -218,10 +249,26 @@ class CoverageResult(BaseModel):
     critical_coverage: float
     uncovered_critical: list[str] = Field(default_factory=list)
     uncovered_behaviors: list[str] = Field(default_factory=list)
+    critical_by_name: dict[str, bool] = Field(default_factory=dict)
 
     def as_percent(self, field: str) -> str:
         value = getattr(self, field)
         return f"{value * 100:.1f}%"
+
+
+class RedundancyDecision(BaseModel):
+    label: str
+    semantic_similarity: float
+    behavior_overlap: float
+    expected_behavior_similarity: float
+    historical_overlap: float
+    unique_behavior: list[str] = Field(default_factory=list)
+    critical_behavior: bool = False
+    boundary_unique: bool = False
+    conflict: bool = False
+    decision_confidence: float
+    recommendation: RecommendationState
+    reasons: list[str] = Field(default_factory=list)
 
 
 class RedundantPair(BaseModel):
@@ -237,6 +284,7 @@ class RedundantPair(BaseModel):
     unique_right: list[str]
     recommendation: RecommendationState
     rationale: str
+    decision: RedundancyDecision | None = None
 
 
 class WitnessRecord(BaseModel):
@@ -245,6 +293,9 @@ class WitnessRecord(BaseModel):
     unique_critical: list[str]
     summary: str
     recommendation: RecommendationState
+    boundary_marks: list[str] = Field(default_factory=list)
+    unique_combo: bool = False
+    unique_failure: bool = False
 
 
 class Recommendation(BaseModel):
@@ -267,6 +318,8 @@ class TestEvidence(BaseModel):
     redundancy_max: float
     stale: bool
     conflict: bool
+    lifecycle: str = "ACTIVE"
+    stale_status: str = "ACTIVE"
 
 
 class RemovalSimulation(BaseModel):
@@ -278,8 +331,34 @@ class RemovalSimulation(BaseModel):
     lost_atoms: list[str]
     lost_critical_atoms: list[str]
     lost_unique_witnesses: list[str]
+    unique_witnesses_before: int = 0
+    unique_witnesses_after: int = 0
+    critical_by_name_before: dict[str, bool] = Field(default_factory=dict)
+    critical_by_name_after: dict[str, bool] = Field(default_factory=dict)
     verdict: Verdict
     reasons: list[str]
+
+
+class OracleConflict(BaseModel):
+    left_id: str
+    right_id: str
+    kind: str
+    detail: str
+
+
+class OracleHealth(BaseModel):
+    test_id: str
+    status: OracleStatus
+    confidence: float
+    reasons: list[str] = Field(default_factory=list)
+
+
+class RequirementCoverage(BaseModel):
+    requirement_id: str
+    description: str = ""
+    critical: bool = False
+    covered_by: list[str] = Field(default_factory=list)
+    uncovered: bool = False
 
 
 class AnalysisResult(BaseModel):
@@ -291,6 +370,13 @@ class AnalysisResult(BaseModel):
     recommendations: list[Recommendation]
     conflicts: list[str] = Field(default_factory=list)
     methodology: str = ""
+    oracle_health: list[OracleHealth] = Field(default_factory=list)
+    oracle_conflicts: list[OracleConflict] = Field(default_factory=list)
+    requirement_coverage: list[RequirementCoverage] = Field(default_factory=list)
+    timings: dict[str, float] = Field(default_factory=dict)
+    candidate_pairs_considered: int = 0
+    embeddings_used: bool = False
+    llm_used: bool = False
 
 
 class MaintenanceReport(BaseModel):
@@ -305,3 +391,4 @@ class MaintenanceReport(BaseModel):
     estimated_suite_reduction: float
     evidence: list[TestEvidence]
     notes: list[str] = Field(default_factory=list)
+    requirement_coverage: list[RequirementCoverage] = Field(default_factory=list)

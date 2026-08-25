@@ -79,9 +79,7 @@ def compute_coverage(
     observed = {atom for _, b in kept for atom in b.atoms()}
     all_atoms = set(universe) if universe is not None else {atom for b in behaviors for atom in b.atoms()}
     crit_universe = (
-        set(critical_universe)
-        if critical_universe is not None
-        else critical_atoms_for(behaviors, declared_critical)
+        set(critical_universe) if critical_universe is not None else critical_atoms_for(behaviors, declared_critical)
     )
     # Declared behaviors that no remaining test covers.
     covered_declared = set()
@@ -122,9 +120,7 @@ def compute_coverage(
             covered_critical_n = declared_covered
         else:
             critical_coverage = (
-                1.0
-                if any(b.critical for _, b in kept) or not any(b.critical for b in behaviors)
-                else 0.0
+                1.0 if any(b.critical for _, b in kept) or not any(b.critical for b in behaviors) else 0.0
             )
             if any(b.critical for b in behaviors):
                 remaining_crit = any(b.critical for _, b in kept)
@@ -148,6 +144,7 @@ def compute_coverage(
         critical_coverage=round(critical_coverage, 6),
         uncovered_critical=uncovered_critical,
         uncovered_behaviors=uncovered_behaviors,
+        critical_by_name={name: name not in uncovered_critical for name in declared_norm} if declared_norm else {},
     )
 
 

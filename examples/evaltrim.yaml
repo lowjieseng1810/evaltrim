@@ -1,0 +1,7 @@
+# Optional repo policy. EvalTrim stays local; this file never leaves the machine.
+policies:
+  minimum_critical_coverage: 1.0
+  max_behavior_coverage_drop: 0.01
+  minimum_retirement_confidence: 0.80
+  fail_on_oracle_conflict: true
+  critical_behavior_loss: fail

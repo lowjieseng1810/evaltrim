@@ -144,12 +144,71 @@ def _binary_prf(pred: set[str], expected: set[str]) -> tuple[float | None, float
 
 
 def _equivalent(a, b) -> bool:
-    sa = json.dumps([r.model_dump(mode="json") for r in a.recommendations], sort_keys=True)
-    sb = json.dumps([r.model_dump(mode="json") for r in b.recommendations], sort_keys=True)
-    return sa == sb
+    def dump(result):
+        recs = [r.model_dump(mode="json") for r in result.recommendations]
+        return json.dumps(recs, sort_keys=True)
+
+    return dump(a) == dump(b)
 
 
 def retirement_safety_check(suite: TestSuite, critical_ids: set[str]) -> bool:
     result = analyze_suite(suite)
     retire = {r.test_id for r in result.recommendations if r.state == RecommendationState.RETIRE}
     return retire.isdisjoint(critical_ids)
+
+
+def generate_scale_suite(n: int, *, seed: int = 7) -> TestSuite:
+    """Deterministic synthetic suite for runtime measurement. Not a quality benchmark."""
+    from evaltrim.models import Tags, TestCase
+
+    domains = ["refund", "privacy", "coding", "shopping"]
+    actions = ["escalation", "refusal", "execution", "confirmation"]
+    tests: list[TestCase] = []
+    for i in range(n):
+        domain = domains[i % len(domains)]
+        action = actions[i % len(actions)]
+        amount = 400 + (i % 5) * 50
+        case = TestCase(
+            id=f"gen-{i:05d}",
+            input=f"{domain} request amount ${amount} case {i // 17}",
+            expected=f"Agent should apply {action} for {domain}.",
+            tags=Tags(domain=domain, action=action, behavior=[action], critical=i % 23 == 0),
+        )
+        if i % 17 == 1 and i > 0:
+            prev = tests[i - 1]
+            case = case.model_copy(update={"input": prev.input, "expected": prev.expected, "tags": prev.tags})
+        tests.append(case)
+    return TestSuite(
+        name=f"scale-{n}",
+        tests=tests,
+        critical_behaviors=["payment", "privacy"],
+        description="Generated runtime fixture",
+    )
+
+
+def run_scale_benchmark(sizes: list[int]) -> list[dict[str, Any]]:
+    import tracemalloc
+
+    rows = []
+    for n in sizes:
+        suite = generate_scale_suite(n)
+        tracemalloc.start()
+        t0 = time.perf_counter()
+        result = analyze_suite(suite)
+        elapsed = time.perf_counter() - t0
+        _current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        rows.append(
+            {
+                "tests": n,
+                "runtime_seconds": round(elapsed, 4),
+                "peak_mib": round(peak / (1024 * 1024), 2),
+                "candidate_pairs": result.candidate_pairs_considered,
+                "timings": result.timings,
+                "keep": result.summary.keep,
+                "merge": result.summary.merge,
+                "retire": result.summary.retire,
+                "review": result.summary.review,
+            }
+        )
+    return rows

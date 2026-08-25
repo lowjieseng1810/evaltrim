@@ -31,3 +31,9 @@ class StrictModeError(EvalTrimError):
     """Policy thresholds were violated in --strict mode."""
 
     exit_code = 3
+
+
+class InternalError(EvalTrimError):
+    """Unexpected failure. Exit code 4."""
+
+    exit_code = 4

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import typer
@@ -11,9 +12,14 @@ from rich.table import Table
 from evaltrim import __version__
 from evaltrim.analyze import analyze_suite, build_maintenance, simulate_suite
 from evaltrim.benchmark import run_all_benchmarks, run_benchmark
-from evaltrim.errors import EvalTrimError, StrictModeError
+from evaltrim.core.manifest import EvaluationRecord
+from evaltrim.errors import EvalTrimError, InternalError, StrictModeError
+from evaltrim.integrations.jsonl import import_jsonl, write_suite
 from evaltrim.models import Verdict
 from evaltrim.parser import load_suite
+from evaltrim.policy import assert_policies, discover_policy, evaluate_policies, load_policy_file, merge_config
+from evaltrim.regression.compare import compare_analysis
+from evaltrim.regression.snapshot import list_snapshots, load_analysis, save_analysis, snapshot_dir
 from evaltrim.reports import (
     maintenance_to_json,
     render_github_comment,
@@ -23,6 +29,9 @@ from evaltrim.reports import (
     result_to_json,
     simulation_to_json,
 )
+from evaltrim.runtime.adapters import resolve_adapter
+from evaltrim.runtime.replay import replay_recording, save_recording
+from evaltrim.runtime.runner import run_suite
 
 app = typer.Typer(
     name="evaltrim",
@@ -103,12 +112,20 @@ def _fail(exc: EvalTrimError) -> None:
     raise typer.Exit(exc.exit_code)
 
 
+def _load(suite: Path):
+    loaded = load_suite(suite)
+    found = discover_policy(suite.parent)
+    if found:
+        loaded.config = merge_config(loaded.config, load_policy_file(found))
+    return loaded
+
+
 def _write(text: str, output: Path | None) -> None:
     if output:
         output.write_text(text, encoding="utf-8")
         console.print(f"Wrote {output}")
-    else:
-        console.print(text)
+        return
+    sys.stdout.write(text if text.endswith("\n") else text + "\n")
 
 
 def _version_callback(value: bool) -> None:
@@ -163,7 +180,7 @@ def analyze(
 ) -> None:
     """Map coverage, redundancy, unique witnesses, and recommendations."""
     try:
-        loaded = load_suite(suite)
+        loaded = _load(suite)
         result = analyze_suite(loaded)
     except EvalTrimError as exc:
         _fail(exc)
@@ -181,15 +198,10 @@ def analyze(
         _write(text, output)
 
     if strict:
-        problems: list[str] = []
-        if result.coverage.uncovered_critical:
-            problems.append(
-                "critical coverage incomplete: " + ", ".join(result.coverage.uncovered_critical)
-            )
-        if result.conflicts:
-            problems.append(f"oracle conflicts: {', '.join(result.conflicts)}")
-        if problems:
-            _fail(StrictModeError("Strict mode failed:\n- " + "\n- ".join(problems)))
+        try:
+            assert_policies(result, loaded.config.policies)
+        except EvalTrimError as exc:
+            _fail(exc)
 
 
 @app.command()
@@ -264,6 +276,7 @@ def benchmark(
     ),
     format: str = typer.Option("markdown", "--format"),
     output: Path | None = typer.Option(None, "--output", "-o"),
+    scale: str | None = typer.Option(None, "--scale", help="Comma-separated sizes, e.g. 100,500,1000"),
 ) -> None:
     """Score constructed suites against ground-truth metadata."""
     try:
@@ -271,6 +284,11 @@ def benchmark(
             payload = {"benchmarks": [run_benchmark(path, path.parent / "benchmark_metadata.yaml")]}
         else:
             payload = run_all_benchmarks(path)
+        if scale:
+            from evaltrim.benchmark import run_scale_benchmark
+
+            sizes = [int(x) for x in scale.split(",") if x.strip()]
+            payload["scale"] = run_scale_benchmark(sizes)
     except EvalTrimError as exc:
         _fail(exc)
     if format == "json":
@@ -318,7 +336,186 @@ def _benchmark_markdown(payload: dict) -> str:
         if row.get("unsafe_retirements"):
             lines.append(f"- unsafe_retirements: {row['unsafe_retirements']}")
         lines.append("")
+    if payload.get("scale"):
+        lines.append("## Scale (generated, no quality labels)")
+        for row in payload["scale"]:
+            lines.append(
+                f"- n={row['tests']} runtime={row['runtime_seconds']}s "
+                f"peak_mib={row['peak_mib']} pairs={row['candidate_pairs']}"
+            )
+        lines.append("")
     return "\n".join(lines)
+
+
+@app.command()
+def check(
+    suite: Path = typer.Argument(..., help="Suite to analyze against policy."),
+    config: Path | None = typer.Option(None, "--config", help="evaltrim.yaml path."),
+) -> None:
+    """Apply policy-as-code (exit 3 on violation). Exit codes: 0 pass, 2 invalid, 3 policy, 4 internal."""
+    try:
+        loaded = load_suite(suite)
+        overlay = load_policy_file(config or discover_policy(suite.parent))
+        if overlay:
+            loaded.config = merge_config(loaded.config, overlay)
+        result = analyze_suite(loaded)
+        problems = evaluate_policies(result, loaded.config.policies)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if problems:
+        _fail(StrictModeError("Policy check failed:\n- " + "\n- ".join(problems)))
+    console.print("[green]Policy check passed[/green]")
+
+
+@app.command()
+def run(
+    suite: Path = typer.Argument(...),
+    agent: str = typer.Option("echo-expected", "--agent", help="echo-expected|echo-input|command|mock"),
+    command: str | None = typer.Option(None, "--command", help="Local command for --agent command"),
+    repeats: int = typer.Option(1, "--repeats", min=1),
+    workers: int = typer.Option(1, "--workers", min=1),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    smoke: int | None = typer.Option(None, "--smoke", help="Only the first N cases"),
+    record: Path | None = typer.Option(None, "--record", help="Write a replay recording JSON"),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Run graders against a local agent adapter. Default adapter echoes expected (offline)."""
+    try:
+        loaded = _load(suite)
+        adapter = resolve_adapter(agent, command.split() if command else None)
+        batch = run_suite(loaded, adapter=adapter, repeats=repeats, workers=workers, dry_run=dry_run, smoke=smoke)
+    except EvalTrimError as exc:
+        _fail(exc)
+    except ValueError as exc:
+        _fail(InternalError(str(exc)))
+    if record and not dry_run:
+        save_recording(record, batch)
+        console.print(f"Wrote recording {record}")
+    if format == "json":
+        import json
+
+        console.print(
+            json.dumps(
+                {
+                    "adapter": batch.adapter,
+                    "summary": batch.summary,
+                    "runtime_seconds": batch.runtime_seconds,
+                    "dry_run": batch.dry_run,
+                    "cases": [
+                        {"id": c.record_id, "passed": c.passed, "fingerprint": c.fingerprint} for c in batch.cases
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return
+    console.print(f"Adapter: {batch.adapter}  repeats={batch.repeats}  dry_run={batch.dry_run}")
+    console.print(str(batch.summary))
+
+
+@app.command()
+def replay(
+    recording: Path = typer.Argument(..., help="Recording JSON from evaltrim run --record"),
+    suite: Path = typer.Argument(..., help="Suite used to re-grade recorded outputs"),
+) -> None:
+    """Re-grade a saved recording without calling the agent."""
+    try:
+        loaded = _load(suite)
+        records = [EvaluationRecord.from_test_case(t) for t in loaded.tests]
+        batch = replay_recording(recording, records)
+    except EvalTrimError as exc:
+        _fail(exc)
+    console.print(f"Replayed {len(batch.cases)} cases from {recording}")
+    passed = sum(1 for c in batch.cases if c.passed)
+    console.print(f"Passed: {passed}/{len(batch.cases)}")
+
+
+snapshot_app = typer.Typer(help="Save and compare local analysis snapshots.")
+app.add_typer(snapshot_app, name="snapshot")
+
+
+@snapshot_app.command("save")
+def snapshot_save(
+    name: str = typer.Argument(...),
+    suite: Path = typer.Argument(...),
+) -> None:
+    """Analyze a suite and store the result under .evaltrim/snapshots/."""
+    try:
+        result = analyze_suite(_load(suite))
+        path = save_analysis(name, result)
+    except EvalTrimError as exc:
+        _fail(exc)
+    console.print(f"Saved snapshot {path}")
+
+
+@snapshot_app.command("list")
+def snapshot_list() -> None:
+    names = list_snapshots()
+    if not names:
+        console.print(f"No snapshots in {snapshot_dir()}")
+        return
+    for name in names:
+        console.print(name)
+
+
+@snapshot_app.command("compare")
+def snapshot_compare(
+    baseline: str = typer.Argument(...),
+    current: str = typer.Argument(...),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Compare two named snapshots. This is a suite-analysis diff, not a live agent verdict."""
+    try:
+        diff = compare_analysis(load_analysis(baseline), load_analysis(current))
+    except Exception as exc:  # noqa: BLE001
+        _fail(InternalError(str(exc)))
+    _print_diff(diff, format)
+
+
+@app.command()
+def compare(
+    baseline: Path = typer.Argument(..., help="Baseline suite YAML/JSON"),
+    current: Path = typer.Argument(..., help="Current suite YAML/JSON"),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Analyze two suites and diff coverage/recommendations. Not a live-agent regression claim."""
+    try:
+        diff = compare_analysis(analyze_suite(_load(baseline)), analyze_suite(_load(current)))
+    except EvalTrimError as exc:
+        _fail(exc)
+    _print_diff(diff, format)
+
+
+@app.command("import-jsonl")
+def import_jsonl_cmd(
+    source: Path = typer.Argument(..., help="JSONL file"),
+    output: Path = typer.Option(..., "--output", "-o", help="Destination JSON suite"),
+) -> None:
+    """Import JSONL eval rows into an EvalTrim JSON suite."""
+    try:
+        suite_obj = import_jsonl(source)
+        write_suite(suite_obj, output)
+    except EvalTrimError as exc:
+        _fail(exc)
+    console.print(f"Imported {len(suite_obj.tests)} tests → {output}")
+
+
+def _print_diff(diff: dict, format: str) -> None:
+    if format == "json":
+        import json
+
+        console.print(json.dumps(diff, indent=2))
+        return
+    tests = diff["tests"]
+    crit = diff["critical_coverage"]
+    atoms = diff["behavior_atoms"]
+    console.print("## EvalTrim suite diff")
+    console.print(f"Tests: {tests['before']} -> {tests['after']}")
+    console.print(f"Critical coverage: {crit['before'] * 100:.1f}% -> {crit['after'] * 100:.1f}%")
+    console.print(f"New behaviors: {len(atoms['new'])}")
+    console.print(f"Removed behaviors: {len(atoms['removed'])}")
+    console.print(f"Potential suite-diff risk: {diff['suite_diff_risk']}")
+    console.print(diff["note"])
 
 
 if __name__ == "__main__":

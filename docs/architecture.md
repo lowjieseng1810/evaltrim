@@ -1,34 +1,54 @@
 # Architecture
 
-EvalTrim is a local CLI. Analysis is a pure function from a suite file to a report.
+EvalTrim v0.2 is a **local evaluation control plane**. This document is both an assessment of v0.1 and the Phase A layout.
+
+## v0.1 assessment (preserved)
+
+The v0.1 CLI remains the intelligence layer:
 
 ```
 suite.yaml/json
-    -> parser (Pydantic)
-    -> behavior signatures (tags, else heuristics, else optional LLM)
-    -> similarity matrix (TF-IDF + Jaccard + run-stats)
-    -> unique witnesses
-    -> removal simulation (in memory)
-    -> recommendations (KEEP / MERGE / RETIRE / REVIEW)
-    -> markdown / JSON / GitHub comment
+  → parser (Pydantic)
+  → behavior signatures
+  → candidate pairs (full pairwise ≤200 tests; blocking above)
+  → multi-factor similarity
+  → unique witnesses + boundary marks
+  → in-memory removal simulation
+  → KEEP / MERGE / RETIRE / REVIEW
+  → markdown / JSON / GitHub comment
 ```
 
-## Package layout
+Preserved commands: `analyze`, `simulate-remove`, `maintain`, `benchmark`, `validate`, `init`, `report`.
 
-- `evaltrim.models` — canonical types. Importers should map into `TestCase` / `TestSuite`.
-- `evaltrim.parser` — YAML and JSON loaders.
-- `evaltrim.behavior` — deterministic signature extraction.
-- `evaltrim.similarity` — multi-factor pair scores.
-- `evaltrim.coverage` — atom coverage and uniqueness.
-- `evaltrim.simulate` — virtual removal.
-- `evaltrim.recommend` — explainable policy.
-- `evaltrim.analyze` — pipeline.
-- `evaltrim.reports` — rendering.
-- `evaltrim.cli` — Typer commands.
-- `evaltrim.llm` — optional interfaces; unused unless the user wires a provider.
+## Phase A boundaries (v0.2)
 
-There is no hosted service, no database server, and no required SQLite. All structures are in-memory.
+New packages sit *beside* the v0.1 modules. Nothing was rewritten “for style.”
 
-## Design rule
+| Package | Role |
+| --- | --- |
+| `evaltrim.core` | Canonical `EvaluationRecord` manifest; re-exports policies/models |
+| `evaltrim.evaluation` | Graders, assertions, multi-run statistics |
+| `evaltrim.runtime` | Local adapters, batch runner, record/replay |
+| `evaltrim.regression` | Snapshot save/load and **suite** diffs (not live-agent claims) |
+| `evaltrim.integrations` | JSONL importer |
+| `evaltrim.embeddings` | Optional hashing encoder; off by default |
+| `evaltrim.policy` | `evaltrim.yaml` policy-as-code |
 
-Recommendations are evidence. The tool never deletes or rewrites the suite.
+Future phases (trace watch, MCP, sandbox backends, portfolio optimizer) get folders later. Do not treat empty folders as features.
+
+## Data flow (Phase A)
+
+```
+TestSuite ──► EvaluationRecord ──► AgentAdapter.run ──► AgentOutput
+                     │                                         │
+                     └── graders / assertions ◄────────────────┘
+                     │
+                     └── analyze_suite (portfolio intelligence)
+```
+
+## Design rules
+
+- No hosted backend, no telemetry, no default network.
+- Recommendations never delete files.
+- Snapshot compare language is about **suites**, not production agent regressions.
+- LLM judge grader is an interface; default result is `skipped`.

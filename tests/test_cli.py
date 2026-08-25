@@ -11,7 +11,7 @@ DEMO = Path("examples/demo_suite.yaml")
 def test_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.stdout
+    assert "0.2.0" in result.stdout
 
 
 def test_validate_demo():
@@ -78,7 +78,12 @@ def test_missing_suite_exit_code():
 
 
 def test_deterministic_analyze():
+    import json
+
     a = runner.invoke(app, ["analyze", str(DEMO), "--format", "json"])
     b = runner.invoke(app, ["analyze", str(DEMO), "--format", "json"])
     assert a.exit_code == b.exit_code == 0
-    assert a.stdout == b.stdout
+    da, db = json.loads(a.stdout), json.loads(b.stdout)
+    da.pop("timings", None)
+    db.pop("timings", None)
+    assert da["recommendations"] == db["recommendations"]

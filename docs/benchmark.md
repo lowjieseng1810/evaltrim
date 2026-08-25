@@ -35,12 +35,22 @@ Measured fields:
 | Runtime | < 60s for 1000 cases, excluding LLM |
 | Repeatability | equivalent output on the same input |
 
-Measured on this checkout (`evaltrim benchmark benchmarks`, local TF-IDF, no LLM):
+Measured scale fixtures (`evaltrim benchmark benchmarks --scale 100,500,1000`, generated suites, no LLM, hashing embeddings off, 2026-08-25, v0.2.0):
 
-| Suite | tests | redundancy precision | retirement safety | critical coverage | suite reduction | deterministic | runtime |
+| n | runtime | peak MiB | candidate pairs |
+| --- | --- | --- | --- |
+| 100 | 0.92s | 3.85 | 4950 (full pairwise) |
+| 500 | 6.56s | 18.16 | 19443 (blocked) |
+| 1000 | 19.67s | 35.84 | 36484 (blocked) |
+
+10000 was not run in this pass. Bottleneck is similarity on candidate pairs plus per-test simulation bookkeeping, not a naive 1000² full matrix once n>200 (`full_pairwise_limit`).
+
+## Quality suites (constructed)
+
+Latest `evaltrim benchmark benchmarks` on this checkout (no LLM, embeddings off, v0.2.0):
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | coding_agent | 12 | 1.0 | 1.0 | 1.0 | 33% | yes | ~3ms |
-| customer_support | 14 | 1.0 | 1.0 | 1.0 | 29% | yes | ~4ms |
+| customer_support | 14 | 1.0 | 1.0 | 1.0 | 36% | yes | ~7ms |
 | shopping_agent | 14 | 1.0 | 1.0 | 1.0 | 14% | yes | ~4ms |
 
 Recall vs constructed groups is lower than precision (near-paraphrases are not always grouped). Shopping reduction is below the 20–40% *target band*. Treat the table as a snapshot, not a product claim.

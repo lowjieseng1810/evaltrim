@@ -19,4 +19,6 @@ evaltrim-report.md
 evaltrim-report.json
 .DS_Store
 .idea/
-.vscode/
+.evaltrim/
+*.jsonl.imported.json
+.evaltrim-cache/

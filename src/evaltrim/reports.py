@@ -79,6 +79,14 @@ def render_markdown(result: AnalysisResult) -> str:
         lines += ["", "Oracle conflicts (similar inputs, diverging expected):"]
         for cid in result.conflicts:
             lines.append(f"- `{cid}`")
+    if result.requirement_coverage:
+        lines += ["", "## Requirement coverage", ""]
+        for row in result.requirement_coverage:
+            if row.uncovered:
+                warn = "  WARNING: uncovered critical requirement" if row.critical else "  WARNING: uncovered"
+                lines.append(f"`{row.requirement_id}` covered by: 0 tests{warn}")
+            else:
+                lines.append(f"`{row.requirement_id}` covered by: {len(row.covered_by)} tests")
     lines += ["", "## Recommendations", ""]
     for rec in result.recommendations:
         lines.append(f"### `{rec.test_id}` — {rec.state.value}")
