@@ -1,0 +1,234 @@
+{
+  "quality": {
+    "benchmarks": [
+      {
+        "suite": "benchmarks/coding_agent/suite.yaml",
+        "tests": 13,
+        "runtime_seconds": 0.0229,
+        "deterministic": true,
+        "redundancy_precision": 1.0,
+        "redundancy_recall": 1.0,
+        "redundancy_f1": 1.0,
+        "false_positive_rate": 0.0,
+        "false_retirement_rate": 0.0,
+        "unique_witness_precision": 1.0,
+        "unique_witness_recall": 1.0,
+        "false_witness_rate": 0.0,
+        "critical_witness_recall": 1.0,
+        "false_critical_witnesses": [],
+        "false_critical_witness_count": 0,
+        "retirement_safety_rate": 1.0,
+        "unsafe_retirements": [],
+        "critical_coverage": 1.0,
+        "suite_reduction": 0.46153846153846156,
+        "keep": 5,
+        "merge": 6,
+        "retire": 0,
+        "review": 2,
+        "predicted_redundant_groups": [
+          [
+            "code-refactor-1",
+            "code-refactor-2",
+            "code-refactor-near",
+            "code-refactor-para"
+          ],
+          [
+            "code-tests",
+            "code-tests-dup"
+          ]
+        ]
+      },
+      {
+        "suite": "benchmarks/customer_support/suite.yaml",
+        "tests": 16,
+        "runtime_seconds": 0.032,
+        "deterministic": true,
+        "redundancy_precision": 1.0,
+        "redundancy_recall": 1.0,
+        "redundancy_f1": 1.0,
+        "false_positive_rate": 0.0,
+        "false_retirement_rate": 0.0,
+        "unique_witness_precision": 1.0,
+        "unique_witness_recall": 1.0,
+        "false_witness_rate": 0.0,
+        "critical_witness_recall": 1.0,
+        "false_critical_witnesses": [],
+        "false_critical_witness_count": 0,
+        "retirement_safety_rate": 1.0,
+        "unsafe_retirements": [],
+        "critical_coverage": 1.0,
+        "suite_reduction": 0.5,
+        "keep": 6,
+        "merge": 8,
+        "retire": 0,
+        "review": 2,
+        "predicted_redundant_groups": [
+          [
+            "cs-refund-hi-1",
+            "cs-refund-hi-2",
+            "cs-refund-hi-near",
+            "cs-refund-para"
+          ],
+          [
+            "cs-refund-low",
+            "cs-refund-low-dup"
+          ],
+          [
+            "cs-wording-a",
+            "cs-wording-b"
+          ]
+        ]
+      },
+      {
+        "suite": "benchmarks/robustness/suite.yaml",
+        "tests": 8,
+        "runtime_seconds": 0.0074,
+        "deterministic": true,
+        "redundancy_precision": null,
+        "redundancy_recall": null,
+        "redundancy_f1": null,
+        "false_positive_rate": null,
+        "false_retirement_rate": 0.0,
+        "unique_witness_precision": 1.0,
+        "unique_witness_recall": 1.0,
+        "false_witness_rate": 0.0,
+        "critical_witness_recall": 1.0,
+        "false_critical_witnesses": [],
+        "false_critical_witness_count": 0,
+        "retirement_safety_rate": 1.0,
+        "unsafe_retirements": [],
+        "critical_coverage": 1.0,
+        "suite_reduction": 0.25,
+        "keep": 3,
+        "merge": 2,
+        "retire": 0,
+        "review": 3,
+        "predicted_redundant_groups": [
+          [
+            "para-refund-a",
+            "para-refund-b"
+          ]
+        ]
+      },
+      {
+        "suite": "benchmarks/shopping_agent/suite.yaml",
+        "tests": 15,
+        "runtime_seconds": 0.0282,
+        "deterministic": true,
+        "redundancy_precision": 1.0,
+        "redundancy_recall": 1.0,
+        "redundancy_f1": 1.0,
+        "false_positive_rate": 0.0,
+        "false_retirement_rate": 0.0,
+        "unique_witness_precision": 1.0,
+        "unique_witness_recall": 1.0,
+        "false_witness_rate": 0.0,
+        "critical_witness_recall": 1.0,
+        "false_critical_witnesses": [],
+        "false_critical_witness_count": 0,
+        "retirement_safety_rate": 1.0,
+        "unsafe_retirements": [],
+        "critical_coverage": 1.0,
+        "suite_reduction": 0.4,
+        "keep": 7,
+        "merge": 6,
+        "retire": 0,
+        "review": 2,
+        "predicted_redundant_groups": [
+          [
+            "shop-add-1",
+            "shop-add-2",
+            "shop-add-near",
+            "shop-add-para"
+          ],
+          [
+            "shop-wording-a",
+            "shop-wording-b"
+          ]
+        ]
+      },
+      {
+        "suite": "benchmarks/witness/suite.yaml",
+        "tests": 20,
+        "runtime_seconds": 0.0479,
+        "deterministic": true,
+        "redundancy_precision": 1.0,
+        "redundancy_recall": 1.0,
+        "redundancy_f1": 1.0,
+        "false_positive_rate": 0.0,
+        "false_retirement_rate": 0.0,
+        "unique_witness_precision": 1.0,
+        "unique_witness_recall": 1.0,
+        "false_witness_rate": 0.0,
+        "critical_witness_recall": 1.0,
+        "false_critical_witnesses": [],
+        "false_critical_witness_count": 0,
+        "retirement_safety_rate": 1.0,
+        "unsafe_retirements": [],
+        "critical_coverage": 1.0,
+        "suite_reduction": 0.3,
+        "keep": 9,
+        "merge": 6,
+        "retire": 0,
+        "review": 5,
+        "predicted_redundant_groups": [
+          [
+            "wit-dup-exact-a",
+            "wit-dup-exact-b",
+            "wit-dup-para-a",
+            "wit-dup-para-b"
+          ],
+          [
+            "wit-near-a",
+            "wit-near-b"
+          ]
+        ]
+      }
+    ],
+    "targets": {
+      "redundancy_precision": 0.9,
+      "critical_coverage_preservation": 1.0,
+      "suite_reduction": [
+        0.2,
+        0.4
+      ],
+      "runtime_seconds_per_1000": 60,
+      "deterministic_repeatability": true,
+      "note": "These are target metrics, not claims. Compare measured values below."
+    }
+  },
+  "scale": [
+    {
+      "tests": 10000,
+      "runtime_seconds": 55.6263,
+      "peak_mib": 416.54,
+      "candidate_pairs": 76205,
+      "simulations_executed": 1.0,
+      "simulation_cache_entries": 1.0,
+      "timings": {
+        "behavior_seconds": 0.753876,
+        "candidate_seconds": 2.641406,
+        "similarity_seconds": 41.223922,
+        "removal_seconds": 5.393874,
+        "total_seconds": 52.062556,
+        "pair_cache_hits": 0.0,
+        "pair_cache_misses": 76205.0,
+        "simulations_executed": 1.0,
+        "simulation_cache_entries": 1.0
+      },
+      "keep": 2,
+      "merge": 430,
+      "retire": 0,
+      "review": 9568
+    }
+  ],
+  "incremental": {
+    "tests": 10000,
+    "changed": 5,
+    "cold_runtime_seconds": 20.2696,
+    "incremental_runtime_seconds": 10.3646,
+    "pair_cache_hits": 75579.0,
+    "pair_cache_misses": 626.0,
+    "note": "Unchanged pairs reuse persisted scores; coverage/removal still run on the full suite."
+  }
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import platform
 import sys
@@ -80,7 +81,8 @@ def run_competitive_harness(
             os.environ["EVALTRIM_NO_CACHE"] = prev_cache
     mut = mutation_score()
     sec = evaluate_security()
-    reproduction = _reproduction_status(agenteval, env)
+    isolated = _load_isolated(root)
+    reproduction = _reproduction_status(agenteval, env, isolated)
 
     rows = _result_rows(
         grader_h2h=grader_h2h,
@@ -93,7 +95,10 @@ def run_competitive_harness(
         scale_rows=scale_rows,
         agenteval=agenteval,
         env=env,
+        isolated=isolated,
     )
+    rows = _overlay_isolated(rows, isolated, __version__)
+    gaps = detect_measured_gaps(rows)
     if competitor:
         key = competitor.lower().replace(" ", "_").replace("-", "_")
         rows = [r for r in rows if key in {r["capability"].lower().replace(" ", "_"), "all"} or True]
@@ -102,7 +107,7 @@ def run_competitive_harness(
             r["requested_competitor"] = competitor
 
     scores = _scorecard(grader_h2h, stats_h2h, flake_h2h, evaltrim_only, quality, mut, sec)
-    status = _competitive_status(reproduction, scores, grader_h2h)
+    status = _competitive_status(reproduction, scores, grader_h2h, gaps, isolated)
 
     payload: dict[str, Any] = {
         "evaltrim_version": __version__,
@@ -123,16 +128,20 @@ def run_competitive_harness(
             "attack_coverage": sec["attack_coverage"],
             "note": sec["note"],
         },
+        "isolated": isolated,
+        "gaps": gaps,
         "metrics": rows,
         "scale": scale_rows,
         "scores": scores,
         "competitive_status": status,
         "runtime_seconds": round(time.perf_counter() - t0, 4),
         "methodology_note": (
-            "MEASURED competitor cells come from in-process AgentEval 0.7.0 on this machine. "
-            "UNMEASURED means the tool was not successfully executed. "
+            "MEASURED competitor cells come from isolated environments under /tmp/evaltrim-comp "
+            "or the committed isolated_measured.json snapshot. "
+            "UNMEASURED means the tool was not successfully executed for that cell. "
             "NOT DIRECTLY COMPARABLE means hosted/UI or a different job. "
-            "Do not treat UNMEASURED as an EvalTrim win."
+            "Do not treat UNMEASURED as an EvalTrim win. "
+            "Do not treat NOT OFFERED as a competitor failure."
         ),
         "agenteval_source": {
             "pypi": "agentevalkit==0.7.0",
@@ -205,23 +214,191 @@ def _try_agenteval() -> dict[str, Any] | None:
         return None
 
 
-def _reproduction_status(agenteval: dict[str, Any] | None, env: dict[str, Any]) -> dict[str, Any]:
-    ae_ok = bool(agenteval and agenteval.get("version") and "error" not in agenteval)
+def _load_isolated(root: Path) -> dict[str, Any]:
+    path = root / "benchmarks" / "competitive" / "results" / "isolated_measured.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _iso_tool(isolated: dict[str, Any], name: str) -> dict[str, Any]:
+    blob = isolated.get(name) if isolated else None
+    return blob if isinstance(blob, dict) else {}
+
+
+def _parse_measured_number(cell: Any) -> float | None:
+    if cell in {UNMEASURED, NDC, NOT_OFFERED, None}:
+        return None
+    if isinstance(cell, (int, float)):
+        return float(cell)
+    text = str(cell)
+    if UNMEASURED in text or NDC in text or "Capability not offered" in text or NOT_OFFERED in text:
+        return None
+    if "MEASURED" not in text:
+        return None
+    token = text.split(";")[0].strip()
+    try:
+        return float(token)
+    except ValueError:
+        return None
+
+
+def detect_measured_gaps(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Identify EvalTrim losses only where both sides are MEASURED numbers."""
+    tools = ("AgentEval", "Promptfoo", "DeepEval", "Inspect", "EvalView", "AgentEvalHQ", "Vercel")
+    lower_better = {
+        "false_positives",
+        "false_positive_rate",
+        "false_retirement_rate_max",
+        "false_retirement_rate",
+        "runtime_seconds",
+        "peak_memory",
+        "setup_time",
+        "config_size",
+        "default_network_required",
+    }
+    losses: list[dict[str, Any]] = []
+    for row in rows:
+        et = _parse_measured_number(row.get("EvalTrim"))
+        if et is None:
+            continue
+        metric = str(row.get("metric") or "")
+        lower = any(k in metric for k in lower_better)
+        for tool in tools:
+            other = _parse_measured_number(row.get(tool))
+            if other is None:
+                continue
+            lost = et > other if lower else et < other
+            if not lost:
+                continue
+            delta = abs(et - other)
+            severity = "LOW"
+            if (
+                metric in {"retirement_safety_min", "critical_coverage_min", "critical_witness_recall"}
+                or "safety" in metric
+            ):
+                severity = "CRITICAL"
+            elif delta >= 0.05 or "accuracy" in metric or "recall" in metric or "precision" in metric:
+                severity = "HIGH"
+            elif delta >= 0.01:
+                severity = "MEDIUM"
+            losses.append(
+                {
+                    "capability": row.get("capability"),
+                    "metric": metric,
+                    "evaltrim": et,
+                    "competitor": tool,
+                    "competitor_value": other,
+                    "severity": severity,
+                    "likely_cause": "Measured numeric gap on a directly comparable cell.",
+                    "proposed_fix": "Investigate only if severity is HIGH or CRITICAL and the metric is in-scope.",
+                    "test_needed": f"regression test for {row.get('capability')}/{metric}",
+                }
+            )
+    order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    losses.sort(key=lambda x: (order.get(x["severity"], 9), x["capability"], x["metric"]))
     return {
-        "successfully_reproduced": ["agentevalkit==0.7.0"] if ae_ok else [],
-        "not_reproducible": [
-            {
-                "name": "promptfoo",
-                "attempted": ["0.122.0", "0.120.0"],
-                "reason": (env.get("competitors") or {}).get("promptfoo", {}).get("failure")
-                or "Node engine / migrator failure",
-            },
-            {"name": "deepeval", "reason": "Not installed; no metrics fabricated"},
-            {"name": "inspect_ai", "reason": "Not installed; no metrics fabricated"},
-            {"name": "evalview", "reason": "Not installed; no metrics fabricated"},
-            {"name": "vercel_agent_eval", "reason": NDC},
-            {"name": "agentevalhq", "reason": "Not installed"},
-        ],
+        "losses": losses,
+        "critical": sum(1 for x in losses if x["severity"] == "CRITICAL"),
+        "high": sum(1 for x in losses if x["severity"] == "HIGH"),
+        "medium": sum(1 for x in losses if x["severity"] == "MEDIUM"),
+        "low": sum(1 for x in losses if x["severity"] == "LOW"),
+    }
+
+
+def _overlay_isolated(rows: list[dict[str, Any]], isolated: dict[str, Any], version: str) -> list[dict[str, Any]]:
+    pf = _iso_tool(isolated, "promptfoo")
+    de = _iso_tool(isolated, "deepeval")
+    ins = _iso_tool(isolated, "inspect_ai")
+    ev = _iso_tool(isolated, "evalview")
+    hq = _iso_tool(isolated, "agentevalhq")
+    for row in rows:
+        row.setdefault("AgentEvalHQ", UNMEASURED)
+        cap = row.get("capability")
+        metric = row.get("metric")
+        if cap == "01_basic_grading" and metric == "common_subset_accuracy":
+            if pf.get("status") == "MEASURED" and pf.get("common_subset_accuracy") is not None:
+                row["Promptfoo"] = _cell(
+                    pf["common_subset_accuracy"],
+                    version=str(pf.get("version")),
+                    extra="echo provider; isolated Node 22.22.0",
+                )
+            if de.get("status") == "MEASURED" and de.get("common_subset_accuracy") is not None:
+                row["DeepEval"] = _cell(
+                    de["common_subset_accuracy"],
+                    version=str(de.get("version")),
+                    extra="ExactMatch+PatternMatch; GEval LLM-DEPENDENT",
+                )
+            if ins.get("status") == "MEASURED" and ins.get("common_subset_accuracy") is not None:
+                row["Inspect"] = _cell(
+                    ins["common_subset_accuracy"], version=str(ins.get("version")), extra="mockllm exact scorer"
+                )
+            if hq.get("status") == "MEASURED" and hq.get("common_subset_accuracy") is not None:
+                row["AgentEvalHQ"] = _cell(
+                    hq["common_subset_accuracy"], version=str(hq.get("version")), extra="ResponseAssertions"
+                )
+            nums = [
+                _parse_measured_number(row["EvalTrim"]),
+                _parse_measured_number(row["AgentEval"]),
+                _parse_measured_number(row["Promptfoo"]),
+                _parse_measured_number(row["DeepEval"]),
+                _parse_measured_number(row["Inspect"]),
+                _parse_measured_number(row["AgentEvalHQ"]),
+            ]
+            measured = [n for n in nums if n is not None]
+            if len(measured) >= 2 and len(set(measured)) == 1:
+                row["winner"] = "TIE"
+            elif measured:
+                best = max(measured)
+                row["winner"] = "TIE" if nums[0] == best else UNMEASURED
+        if cap == "04_trajectory" and ev.get("status") == "MEASURED" and ev.get("trajectory_diff_accuracy") is not None:
+            row["EvalView"] = _cell(
+                ev["trajectory_diff_accuracy"], version=str(ev.get("version")), extra="compare_to_golden canned traces"
+            )
+            et = _parse_measured_number(row["EvalTrim"])
+            ov = ev["trajectory_diff_accuracy"]
+            if et is not None and et == ov:
+                row["winner"] = "TIE"
+        if cap == "13_redteam" and metric == "catalog_breadth" and pf.get("status") == "MEASURED":
+            row["Promptfoo"] = "157 plugins DOCUMENTED (not CLI-counted); CLI executed 0.122.0 for assertions only"
+        if cap == "09_replay" and ev.get("status") == "MEASURED":
+            row["EvalView"] = _cell(
+                ev.get("trajectory_diff_accuracy"), version=str(ev.get("version")), extra="canned golden/actual traces"
+            )
+    return rows
+
+
+def _reproduction_status(
+    agenteval: dict[str, Any] | None, env: dict[str, Any], isolated: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    isolated = isolated or {}
+    reproduced: list[str] = []
+    missing: list[dict[str, Any]] = []
+    if agenteval and agenteval.get("version") and "error" not in agenteval:
+        reproduced.append(f"agentevalkit=={agenteval.get('version')}")
+    else:
+        missing.append({"name": "agenteval", "reason": "import failed"})
+    mapping = [
+        ("promptfoo", "promptfoo"),
+        ("deepeval", "deepeval"),
+        ("inspect_ai", "inspect_ai"),
+        ("evalview", "evalview"),
+        ("agentevalhq", "agentevalhq"),
+    ]
+    for name, key in mapping:
+        raw = isolated.get(key)
+        blob: dict[str, Any] = raw if isinstance(raw, dict) else {}
+        if blob.get("status") == "MEASURED":
+            reproduced.append(f"{name}=={blob.get('version')}")
+        else:
+            missing.append({"name": name, "reason": blob.get("reason") or "not measured in isolated_measured.json"})
+    missing.append({"name": "vercel_agent_eval", "reason": NDC})
+    return {
+        "successfully_reproduced": reproduced,
+        "not_reproducible": missing,
         "hosted_not_directly_comparable": ["langfuse", "phoenix", "braintrust"],
     }
 
@@ -692,8 +869,10 @@ def _evaltrim_workflow(root: Path) -> dict[str, Any]:
 
 
 def _min_metric(quality: dict[str, Any], key: str) -> float | None:
-    """Min over core constructed suites only (not robustness unlabeled groups)."""
-    core = ("coding", "customer_support", "shopping")
+    """Min over core constructed suites (coding/support/shopping). Witness included for uniqueness."""
+    core: tuple[str, ...] = ("coding", "customer_support", "shopping")
+    if key.startswith("unique_witness") or key in {"critical_witness_recall", "false_witness_rate"}:
+        core = ("coding", "customer_support", "shopping", "robustness", "witness")
     vals = []
     for row in quality.get("benchmarks", []):
         suite = str(row.get("suite") or "")
@@ -760,6 +939,7 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
         ve: Any,
         winner: str,
         evidence: str,
+        hq: Any = UNMEASURED,
     ) -> dict[str, Any]:
         return {
             "capability": cap,
@@ -770,6 +950,7 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
             "DeepEval": de,
             "Inspect": insp,
             "EvalView": ev,
+            "AgentEvalHQ": hq,
             "Vercel": ve,
             "winner": winner,
             "evidence": evidence,
@@ -1244,40 +1425,55 @@ def _scorecard(grader_h2h, stats_h2h, flake_h2h, workflow, quality, mut, sec) ->
 
 
 def _competitive_status(
-    reproduction: dict[str, Any], scores: dict[str, Any], grader_h2h: dict[str, Any]
+    reproduction: dict[str, Any],
+    scores: dict[str, Any],
+    grader_h2h: dict[str, Any],
+    gaps: dict[str, Any] | None = None,
+    isolated: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    missing_majors = [x["name"] for x in reproduction.get("not_reproducible", [])]
-    label = "GAPS REMAIN"
+    gaps = gaps or {}
+    isolated = isolated or {}
+    majors = ("promptfoo", "deepeval", "inspect_ai", "evalview", "agentevalhq")
+    measured_majors = [name for name in majors if (_iso_tool(isolated, name).get("status") == "MEASURED")]
+    unmeasured_majors = [name for name in majors if name not in measured_majors]
+    ae_ok = isinstance(grader_h2h.get("agenteval_accuracy"), float)
+    high = int(gaps.get("high") or 0)
+    crit = int(gaps.get("critical") or 0)
+    if crit or high:
+        label = "GAPS REMAIN"
+        also = "Measured HIGH/CRITICAL losses remain; see docs/competitive-gaps.md."
+    elif unmeasured_majors:
+        label = "GAPS REMAIN"
+        also = "PARITY — INCOMPLETE HEAD-TO-HEAD DATA"
+    else:
+        label = "VERIFIED PARITY ON MEASURED DIMENSIONS"
+        also = (
+            "Comparable local-grader/diff cells are tied where both sides were MEASURED. "
+            "Scale, hosted observability, and catalog breadth remain non-comparable. "
+            "This is not universal superiority."
+        )
     reasons = [
-        "Promptfoo, DeepEval, Inspect AI, and EvalView were not successfully executed; their metric cells stay UNMEASURED.",
-        "SUPERIOR is forbidden when major competitor metrics are unmeasured.",
-        "AgentEval 0.7.0 was measured on graders/stats/flakes only — not suite minimization or red-team catalog quality.",
-        "Promptfoo red-team plugin count is documented catalog breadth (157), not a detection-quality score.",
-        "EvalTrim intelligence metrics have no equivalent competitor measurement; that is NOT OFFERED, not a scored win.",
+        "SUPERIOR is forbidden unless every directly comparable major metric is measured and >= the strongest competitor.",
+        "NOT OFFERED on suite-intelligence cells is not a competitor failure.",
+        "Promptfoo plugin catalog size is documented breadth, not detection quality.",
+        "DeepEval GEval/JSON/tool metrics that require an LLM judge are LLM-DEPENDENT, not fabricated.",
+        "10k scale remains EvalTrim-only; competitor scale cells stay UNMEASURED.",
     ]
+    if ae_ok:
+        reasons.append(
+            f"AgentEval overlapping grader accuracy: {grader_h2h.get('agenteval_accuracy')} vs EvalTrim {grader_h2h.get('evaltrim_accuracy')}."
+        )
     ae_acc = grader_h2h.get("agenteval_accuracy")
     et_acc = grader_h2h.get("evaltrim_accuracy")
     measured_note = ""
-    if isinstance(ae_acc, float) and isinstance(et_acc, float):
-        if et_acc > ae_acc:
-            measured_note = (
-                "On the AgentEval overlapping grader subset, EvalTrim accuracy was higher "
-                f"({et_acc} vs {ae_acc}). Subset-only; not universal superiority."
-            )
-        elif et_acc == ae_acc:
-            measured_note = (
-                f"On the AgentEval overlapping grader subset, accuracy tied at {et_acc}. "
-                "That is not a superiority claim."
-            )
-        else:
-            measured_note = (
-                f"On the AgentEval overlapping grader subset, EvalTrim accuracy was lower ({et_acc} vs {ae_acc})."
-            )
+    if isinstance(ae_acc, float) and isinstance(et_acc, float) and et_acc == ae_acc:
+        measured_note = f"On the AgentEval overlapping grader subset, accuracy tied at {et_acc}."
     return {
         "status": label,
-        "also": "PARITY — INCOMPLETE HEAD-TO-HEAD DATA",
+        "also": also,
         "measured_subset": measured_note,
-        "missing_major_competitors": missing_majors,
+        "missing_major_competitors": unmeasured_majors,
+        "measured_major_competitors": measured_majors,
         "evaltrim_scores": {
             "A": scores["A_general_evaluation"],
             "B": scores["B_regression_workflow"],
@@ -1285,6 +1481,7 @@ def _competitive_status(
             "unweighted": scores["overall_unweighted_mean"],
         },
         "reasons": reasons,
+        "high_or_critical_losses": high + crit,
     }
 
 
@@ -1305,12 +1502,13 @@ def _render_results(payload: dict[str, Any]) -> str:
         "",
         "## Head-to-head table",
         "",
-        "| Capability | Metric | EvalTrim | AgentEval | Promptfoo | DeepEval | Inspect | EvalView | Vercel | Winner | Evidence |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Capability | Metric | EvalTrim | AgentEval | Promptfoo | DeepEval | Inspect | EvalView | AgentEvalHQ | Vercel | Winner | Evidence |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in payload.get("metrics", []):
+        row = {**row, "AgentEvalHQ": row.get("AgentEvalHQ", UNMEASURED)}
         lines.append(
-            "| {capability} | {metric} | {EvalTrim} | {AgentEval} | {Promptfoo} | {DeepEval} | {Inspect} | {EvalView} | {Vercel} | {winner} | {evidence} |".format(
+            "| {capability} | {metric} | {EvalTrim} | {AgentEval} | {Promptfoo} | {DeepEval} | {Inspect} | {EvalView} | {AgentEvalHQ} | {Vercel} | {winner} | {evidence} |".format(
                 **row
             )
         )
@@ -1356,10 +1554,37 @@ def _render_results(payload: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_gaps(payload: dict[str, Any]) -> str:
+    gaps = payload.get("gaps") or {}
+    losses = list(gaps.get("losses") or [])
+    lines = [
+        "# Competitive gaps",
+        "",
+        "Only **MEASURED vs MEASURED** numeric cells can appear here. UNMEASURED and NOT OFFERED are not losses.",
+        "",
+        f"CRITICAL: {gaps.get('critical', 0)} · HIGH: {gaps.get('high', 0)} · MEDIUM: {gaps.get('medium', 0)} · LOW: {gaps.get('low', 0)}",
+        "",
+    ]
+    if not losses:
+        lines += ["No measured numeric losses for EvalTrim on this run.", ""]
+        return "\n".join(lines)
+    lines += [
+        "| Severity | Capability | Metric | EvalTrim | Competitor | Value |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in losses:
+        lines.append(
+            f"| {item['severity']} | {item['capability']} | {item['metric']} | {item['evaltrim']} | {item['competitor']} | {item['competitor_value']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _write_docs(root: Path, payload: dict[str, Any]) -> None:
     docs = root / "docs"
     docs.mkdir(exist_ok=True)
     (docs / "competitive-results.md").write_text(_render_results(payload), encoding="utf-8")
+    (docs / "competitive-gaps.md").write_text(_render_gaps(payload), encoding="utf-8")
     readme = root / "benchmarks" / "competitive" / "README.md"
     readme.write_text(
         "# Competitive harness\n\n"

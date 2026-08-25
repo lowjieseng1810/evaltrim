@@ -45,8 +45,19 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
     false_retirement_rate = round(len(unsafe_retire) / max(len(retire_ids), 1), 4) if retire_ids else 0.0
 
     expected_unique = set(meta.get("expected_unique_witnesses", []))
-    pred_unique = {w.test_id for w in result.witnesses if w.unique_atoms}
+    pred_unique = {w.test_id for w in result.witnesses if w.is_unique_witness}
     unique_precision, unique_recall = _binary_prf(pred_unique, expected_unique)
+    labeled_critical_witnesses = expected_unique & expected_critical
+    pred_crit = {w.test_id for w in result.witnesses if w.is_critical_witness}
+    false_critical_witnesses = sorted(pred_crit - expected_critical)
+    crit_cov_recall = None
+    if labeled_critical_witnesses:
+        crit_cov_recall = round(len(labeled_critical_witnesses & pred_unique) / len(labeled_critical_witnesses), 4)
+    false_witness_rate = None
+    if pred_unique:
+        false_witness_rate = round(len(pred_unique - expected_unique) / len(pred_unique), 4)
+    elif expected_unique:
+        false_witness_rate = 0.0
 
     reduction = result.summary.estimated_ci_reduction
     return {
@@ -61,6 +72,10 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
         "false_retirement_rate": false_retirement_rate,
         "unique_witness_precision": unique_precision,
         "unique_witness_recall": unique_recall,
+        "false_witness_rate": false_witness_rate,
+        "critical_witness_recall": crit_cov_recall,
+        "false_critical_witnesses": false_critical_witnesses,
+        "false_critical_witness_count": len(false_critical_witnesses),
         "retirement_safety_rate": retirement_safety,
         "unsafe_retirements": unsafe_retire,
         "critical_coverage": result.coverage.critical_coverage,
@@ -77,7 +92,7 @@ def run_all_benchmarks(root: Path) -> dict[str, Any]:
     suites = sorted(root.glob("*/suite.yaml"))
     results = []
     for suite_path in suites:
-        if suite_path.parent.name == "competitive":
+        if suite_path.parent.name in {"competitive", "baseline"}:
             continue
         results.append(run_benchmark(suite_path, suite_path.parent / "benchmark_metadata.yaml"))
     return {
@@ -223,3 +238,44 @@ def run_scale_benchmark(sizes: list[int]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def run_incremental_scale_benchmark(*, n: int = 10000, changed: int = 5) -> dict[str, Any]:
+    """Warm-cache a large suite, mutate `changed` tests, re-analyze with pair cache on."""
+    import os
+
+    suite = generate_scale_suite(n)
+    prev = os.environ.get("EVALTRIM_NO_CACHE")
+    if prev is not None:
+        os.environ.pop("EVALTRIM_NO_CACHE", None)
+    t_cold = None
+    try:
+        t0 = time.perf_counter()
+        analyze_suite(suite, use_cache=True)
+        t_cold = time.perf_counter() - t0
+        mutated = []
+        for i, test in enumerate(suite.tests):
+            if i < changed:
+                mutated.append(
+                    test.model_copy(
+                        update={"input": test.input + " [changed]", "expected": test.expected + " [changed]"}
+                    )
+                )
+            else:
+                mutated.append(test)
+        suite2 = suite.model_copy(update={"tests": mutated})
+        t1 = time.perf_counter()
+        result = analyze_suite(suite2, use_cache=True)
+        t_inc = time.perf_counter() - t1
+    finally:
+        if prev is not None:
+            os.environ["EVALTRIM_NO_CACHE"] = prev
+    return {
+        "tests": n,
+        "changed": changed,
+        "cold_runtime_seconds": round(t_cold or 0.0, 4),
+        "incremental_runtime_seconds": round(t_inc, 4),
+        "pair_cache_hits": result.timings.get("pair_cache_hits"),
+        "pair_cache_misses": result.timings.get("pair_cache_misses"),
+        "note": "Unchanged pairs reuse persisted scores; coverage/removal still run on the full suite.",
+    }

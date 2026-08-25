@@ -1,0 +1,124 @@
+# Immutable conceptual 20-task workload. Ground truth labels are not rewritten after publication.
+schema_version: 1
+immutable: true
+tasks:
+  - id: 01_exact
+    category: grading
+    input: "Hello world"
+    expected: "Hello world"
+    oracle: exact
+    expected_classification: pass
+  - id: 02_contains
+    category: grading
+    input: "The capital is Paris."
+    expected: contains Paris
+    oracle: contains
+    expected_classification: pass
+  - id: 03_regex
+    category: grading
+    input: "order-42-ok"
+    expected: "order-\\d+-ok"
+    oracle: regex
+    expected_classification: pass
+  - id: 04_json_schema
+    category: grading
+    input: '{"ok": true}'
+    expected: object with required ok boolean
+    oracle: json_schema
+    expected_classification: pass
+  - id: 05_numeric_tolerance
+    category: grading
+    input: "10.1"
+    expected: 10 ± 0.2
+    oracle: numeric
+    expected_classification: pass
+  - id: 06_semantic_paraphrase
+    category: grading
+    input: "Please return six hundred dollars"
+    expected: escalate refund
+    oracle: semantic_candidate_only
+    expected_classification: paraphrase_not_hard_negative
+  - id: 07_hard_negative
+    category: grading
+    input: "I need a refund of $600, but I already received store credit"
+    expected: clarify store credit
+    oracle: anti_merge
+    expected_classification: keep
+  - id: 08_tool_call
+    category: agent
+    input: search then lookup
+    expected: required tool search
+    oracle: tool_call
+    expected_classification: pass
+  - id: 09_tool_arguments
+    category: agent
+    input: refund amount 20
+    expected: tool args equals
+    oracle: tool_args
+    expected_classification: pass
+  - id: 10_trajectory
+    category: agent
+    input: lookup then verify then refund
+    expected: ordered subsequence
+    oracle: trajectory
+    expected_classification: pass
+  - id: 11_multiturn
+    category: agent
+    input: scenario_refund.yaml
+    expected: end_state_ok
+    oracle: scenario
+    expected_classification: pass
+  - id: 12_statistics
+    category: regression
+    input: n=20 scores of 1.0 vs 1.0
+    expected: no false regression
+    oracle: welch
+    expected_classification: unchanged
+  - id: 13_regression
+    category: regression
+    input: mean drop 1.0 to 0.0
+    expected: detect drop
+    oracle: welch
+    expected_classification: regression
+  - id: 14_provider_error
+    category: regression
+    input: provider_error outcome
+    expected: not CONFIRMED_REGRESSION
+    oracle: run_delta
+    expected_classification: environmental
+  - id: 15_flaky_history
+    category: regression
+    input: mixed pass/fail history
+    expected: flaky or mixed
+    oracle: flake
+    expected_classification: flaky
+  - id: 16_redteam
+    category: security
+    input: common local probes
+    expected: detection >= 0.95, FP <= 0.05
+    oracle: local_probes
+    expected_classification: detect_unsafe
+  - id: 17_scenario
+    category: agent
+    input: examples/scenario_refund.yaml
+    expected: replayable
+    oracle: scenario
+    expected_classification: pass
+  - id: 18_replay
+    category: workflow
+    input: recorded agent output
+    expected: identical replay
+    oracle: fingerprint
+    expected_classification: pass
+  - id: 19_suite_minimization
+    category: intelligence
+    input: constructed suites
+    expected: retirement_safety 1.0
+    oracle: counterfactual
+    expected_classification: keep_criticals
+  - id: 20_scale
+    category: performance
+    input: generate_scale_suite 100..10000
+    expected: runtime recorded
+    oracle: wall_clock
+    expected_classification: measured

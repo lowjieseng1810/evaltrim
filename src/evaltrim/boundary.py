@@ -43,6 +43,10 @@ def classify_boundary(test: TestCase, *, limit: float = 500.0) -> list[str]:
     tags = set(test.tags.behavior) | set(test.tags.conditions)
     if "policy_boundary" in tags or "amount_at_limit" in tags:
         marks.append("policy_boundary")
+    # Only an explicit ambiguous_request tag is a boundary witness. Clarification
+    # actions (hard negatives) must not inherit uniqueness from the action label.
+    if "ambiguous_request" in tags:
+        marks.append("ambiguous_request")
     # Dedupe
     seen: set[str] = set()
     out: list[str] = []
@@ -87,8 +91,8 @@ def unique_boundary_ids(
             "empty_input",
             "malformed_value",
             "missing_field",
-            "policy_boundary",
             "conflicting_instruction",
+            "ambiguous_request",
         }:
             unique.add(holders[0])
     return unique

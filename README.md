@@ -8,7 +8,7 @@ EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace 
 
 It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-Current version: **0.9.0** (beta public API — not 1.0). Competitive verification (2026-08-25): **GAPS REMAIN**. AgentEval 0.7.0 was measured on a grader/stat/flake subset. Promptfoo, DeepEval, Inspect AI, and EvalView were **not** reproduced. Unreproduced cells stay **UNMEASURED** and are not wins.
+Current version: **1.0.0**. Competitive verification (2026-08-25): **VERIFIED PARITY ON MEASURED DIMENSIONS**. Common local graders tied at 1.0 where both sides were MEASURED (AgentEval 0.7.0, Promptfoo 0.122.0 echo assertions, DeepEval ExactMatch/PatternMatch, Inspect mockllm exact, AgentEvalHQ ResponseAssertions). EvalView canned trajectory diffs tied at 1.0. This is **not** “beats all competitors.” 10k scale and suite-intelligence remain EvalTrim-only measurements; hosted platforms are NOT DIRECTLY COMPARABLE.
 
 ## First run
 
@@ -115,19 +115,12 @@ Generated from this repo’s demo suite. Not mocked numbers.
 
 Open [docs/images/report.html](docs/images/report.html).
 
-## Measured quality (v0.9.0)
+## Measured quality (v1.0.0)
 
 Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
-No LLM. Embeddings off. Constructed suites — **not** production traffic.
+No LLM. Embeddings off. Constructed suites — **not** production traffic. See [docs/benchmark.md](docs/benchmark.md).
 
-Re-measured after the 0.9 pass (same immutable metadata on coding/customer_support/shopping). See [docs/benchmark.md](docs/benchmark.md).
-
-Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
-No LLM. Embeddings off. Constructed suites — **not** production traffic.
-
-Re-measured after the 0.7 pass (same metadata, same merge bar). Numbers below are filled from the latest local run in [docs/benchmark.md](docs/benchmark.md).
-
-v0.6.0 on the same harness was already precision/recall/safety/critical coverage **1.0** on those three suites. The 0.7 bar is: keep those safety metrics while adding graders/stats and reducing scale runtime.
+Unique-witness precision/recall on labeled constructed suites is ≥ 0.95 with critical witness recall 1.0. Ground truth files were not rewritten to chase scores.
 
 ## Competitive comparison
 
@@ -135,7 +128,7 @@ See [docs/competitive-benchmark.md](docs/competitive-benchmark.md), [docs/compet
 
 Command: `evaltrim benchmark competitive --format json`
 
-Competitor columns that were not reproduced in-process are **UNMEASURED**. EvalTrim is **not** declared superior to Promptfoo red-team catalogs, EvalView snapshots, Vercel coding sandboxes, or hosted experiment UIs.
+Competitor columns that were not executed for a cell stay **UNMEASURED**. NOT OFFERED is not a competitor failure. EvalTrim is **not** declared superior on catalog size, hosted UIs, or unmeasured 10k competitor scale.
 
 | Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -1,0 +1,43 @@
+# Immutable labeled witness ground truth. Do not rewrite to chase scores.
+schema_version: 1
+immutable: true
+suite: witness
+expected_redundant_groups:
+  - [wit-dup-exact-a, wit-dup-exact-b, wit-dup-para-a, wit-dup-para-b]
+  - [wit-near-a, wit-near-b]
+expected_unique_witnesses:
+  - wit-atom-privacy
+  - wit-combo-force
+  - wit-critical-delete
+  - wit-boundary
+  - wit-req-only
+  - wit-hist
+  - wit-family
+  - wit-traj-skip
+expected_critical_cases:
+  - wit-atom-privacy
+  - wit-combo-force
+  - wit-critical-delete
+  - wit-boundary
+  - wit-req-only
+  - wit-conflict-b
+  - wit-weak-band
+  - wit-traj-skip
+expected_not_unique:
+  - wit-dup-exact-a
+  - wit-dup-exact-b
+  - wit-dup-para-a
+  - wit-dup-para-b
+  - wit-near-a
+  - wit-near-b
+  - wit-hardneg
+  - wit-stale
+  - wit-conflict-a
+  - wit-conflict-b
+  - wit-weak-band
+  - wit-traj-base
+notes:
+  - Hard negatives must KEEP (anti-merge) without being labeled coverage-unique.
+  - Weak leftover bands (amount_below_limit) are not unique witnesses even if tagged critical.
+  - Same-input oracle conflicts are not unique witnesses unless critical coverage is lost.
+  - Critical witness recall is scored on expected_unique ∩ expected_critical.

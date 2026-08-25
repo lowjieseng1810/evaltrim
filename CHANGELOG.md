@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 — 2026-08-25
+
+Release after unique-witness repair and isolated competitor reproduction.
+
+- Unique-witness classifier: coverage uniqueness from counterfactual loss and exclusive signatures, not leftover generic tokens. Critical witness recall 1.0 and false critical witnesses 0 on labeled suites. Labeled suite: `benchmarks/witness/`.
+- `evaltrim portfolio --objective witness` returns a minimum practical witness set (heuristic, not a proven optimum).
+- Isolated competitor environments (Node 22.22.0 Promptfoo 0.122.0, DeepEval 4.2.0, Inspect 0.3.260, EvalView 0.8.1, AgentEvalHQ 0.28.0-beta, AgentEval 0.7.0). Hosted Langfuse/Phoenix/Braintrust remain NOT DIRECTLY COMPARABLE.
+- Competitive status: **VERIFIED PARITY ON MEASURED DIMENSIONS**. Not a claim of beating every competitor on every surface. Scale and suite-intelligence remain EvalTrim-measured / NOT OFFERED for peers.
+- Incremental pair-cache benchmark helper for “10k suite, 5 tests changed”.
+
 ## 0.9.0 — 2026-08-25
 
 Internal maturity pass (engineering target, not a public 9/10 score).

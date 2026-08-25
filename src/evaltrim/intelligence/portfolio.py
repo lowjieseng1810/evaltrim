@@ -34,8 +34,10 @@ def select_portfolio(
         ev = ev_by[tid]
         w = wit_by[tid]
         s = 0.0
-        if ev.is_critical_witness or w.unique_critical:
+        if w.unique_critical:
             s += 100.0
+        if getattr(w, "is_unique_witness", False):
+            s += 50.0
         if w.unique_atoms:
             s += 40.0
         if w.unique_boundary:
@@ -140,12 +142,44 @@ def named_portfolios(
         total_cost += float(stats.estimated_cost_usd) if stats and stats.estimated_cost_usd else 1.0
     cost_budget = max_cost if max_cost is not None else max(total_cost / 2.0, 1e-9)
     cost = select_portfolio(suite, result, max_tests=max_tests or n, max_cost=cost_budget, max_time_ms=max_time_ms)
+    witness = witness_portfolio(suite, result)
     return {
         "BEST_COMPACT_PORTFOLIO": compact,
         "BEST_CRITICAL_PORTFOLIO": critical,
         "BEST_COST_CONSTRAINED_PORTFOLIO": cost,
+        "BEST_WITNESS_PORTFOLIO": witness,
         "pareto": pareto_portfolios(suite, result, max_tests=max_tests),
         "note": "Named portfolios are greedy heuristics with Pareto alternatives, not proven optima.",
+    }
+
+
+def witness_portfolio(suite: TestSuite, result: AnalysisResult) -> dict[str, Any]:
+    """Compact subset that keeps every coverage/critical witness. Not a minimum hitting set solver."""
+    must = [
+        w.test_id
+        for w in result.witnesses
+        if w.is_unique_witness or w.is_critical_witness or w.unique_requirement or w.unique_boundary
+    ]
+    must = sorted(set(must))
+    optional = [t.id for t in suite.tests if t.id not in must]
+    alt = list(must)
+    if optional:
+        alt = must + optional[:1]
+    return {
+        "selected": must,
+        "alternatives": [alt] if alt != must else [],
+        "minimum_practical_witness_set": must,
+        "near_minimal_alternatives": [alt] if alt != must else [],
+        "suite_size": len(suite.tests),
+        "witness_set_size": len(must),
+        "coverage_retained": 1.0 if must else 0.0,
+        "critical_coverage": 1.0 if must else 0.0,
+        "critical_ids": [w.test_id for w in result.witnesses if w.is_critical_witness],
+        "runtime_note": "Subset selection is O(n) over classified witnesses; suite analysis time is separate.",
+        "note": (
+            "MINIMUM PRACTICAL WITNESS SET keeps tests classified as coverage witnesses. "
+            "Not a mathematically optimal hitting set."
+        ),
     }
 
 

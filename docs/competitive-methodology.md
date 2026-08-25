@@ -1,6 +1,31 @@
 # Competitive methodology
 
-Date of this verification pass: **2026-08-25**. EvalTrim **0.9.0**.
+Date of this verification pass: **2026-08-25**. EvalTrim **1.0.0**.
+
+## Fairness
+
+1. Each tool uses its normal API in an **isolated** tree (`/tmp/evaltrim-comp` or in-process AgentEval via `EVALTRIM_COMPETITOR_PATH`).
+2. Competitors were not crippled. Missing extras are recorded; those graders were not scored.
+3. EvalTrim has no hidden fixture-only flags.
+4. Different names for the same check are compared on outcomes, not labels.
+5. The same conceptual fixtures are used when both tools can consume the task (`fixtures/grader_cases.yaml`, `fixtures/common20.yaml`).
+6. If reproduction failed: **UNMEASURED**. If the job differs: **NOT DIRECTLY COMPARABLE**. If the API does not exist: **Capability not offered**.
+7. No fabricated competitor numbers. Catalog size is not detection quality.
+
+## Isolated versions (this pass)
+
+- AgentEval / agentevalkit **0.7.0**
+- Promptfoo **0.122.0** on Node **v22.22.0** (echo provider; no share)
+- DeepEval **4.2.0** ExactMatchMetric + PatternMatchMetric (GEval LLM-DEPENDENT)
+- Inspect AI **0.3.260** mockllm + exact scorer
+- EvalView **0.8.1** `compare_to_golden`
+- AgentEvalHQ **0.28.0-beta** ResponseAssertions (dotnet 8.0.424)
+- Vercel agent-eval: NOT DIRECTLY COMPARABLE
+- Langfuse / Phoenix / Braintrust: NOT DIRECTLY COMPARABLE
+
+## Unique witnesses
+
+Coverage uniqueness requires counterfactual critical/requirement/boundary/history loss or an exclusive non-weak signature. Leftover generic bands (`amount_below_limit`) are anti-merge distinctive atoms, not suite unique witnesses. Ground truth in `benchmarks/*/benchmark_metadata.yaml` was not rewritten.
 
 ## Fairness
 

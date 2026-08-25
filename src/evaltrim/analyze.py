@@ -23,6 +23,7 @@ from evaltrim.intelligence.evidence import ledger_for
 from evaltrim.intelligence.failure_value import failure_detection_value
 from evaltrim.intelligence.graph import behavior_graph
 from evaltrim.intelligence.infogain import information_gain as compute_information_gain
+from evaltrim.intelligence.witness import classify_witness, unique_signatures
 from evaltrim.lifecycle import infer_lifecycle, stale_status
 from evaltrim.llm.base import BehaviorExtractor
 from evaltrim.models import (
@@ -108,7 +109,8 @@ def analyze_suite(
     universe = {atom for b in behaviors for atom in b.atoms()}
     coverage = compute_coverage(tests, behaviors, declared_critical=declared, universe=universe)
     boundary_unique = unique_boundary_ids(tests, marks_by_id)
-    combo_unique = _unique_combos(tests, behaviors)
+    signature_unique = unique_signatures(tests, behaviors)
+    combo_unique = {tid for tid, key in signature_unique.items() if len(key[2]) >= 2}
     failure_unique = _unique_failures(tests)
     family_unique = _unique_failure_families(tests)
     req_unique = _unique_requirements(suite)
@@ -201,6 +203,16 @@ def analyze_suite(
         semantic_pairs=semantic_triples,
     )
     conflict_ids = set(conflict_ids)
+    tests_by_id = {t.id: t for t in tests}
+    exact_input_conflict_ids: set[str] = set()
+    for item in oracle_conflicts:
+        left = tests_by_id.get(item.left_id)
+        right = tests_by_id.get(item.right_id)
+        if left is None or right is None:
+            continue
+        if left.input.strip() == right.input.strip():
+            exact_input_conflict_ids.add(left.id)
+            exact_input_conflict_ids.add(right.id)
     health_by_id = {h.test_id: h for h in oracle_health}
     max_cost = max(((t.run_stats.estimated_cost_usd or 0.0) if t.run_stats else 0.0) for t in tests) or 1.0
 
@@ -258,6 +270,20 @@ def analyze_suite(
         )
         low_conf = behavior.confidence < 0.5 or (behavior.source == "heuristic" and behavior.domain == "unknown")
         life = infer_lifecycle(test, conflict=test.id in conflict_ids, stale_days=cfg.stale_days)
+        classified = classify_witness(
+            test=test,
+            behavior=behavior,
+            unique_atoms=uniq,
+            unique_critical=uniq_crit,
+            unique_boundary=test.id in boundary_unique,
+            unique_requirement=req_unique.get(test.id, []),
+            unique_failure=test.id in failure_unique,
+            unique_failure_family=test.id in family_unique,
+            unique_signature=test.id in signature_unique,
+            simulation=sim,
+            conflict=test.id in conflict_ids,
+            exact_input_conflict=test.id in exact_input_conflict_ids,
+        )
         rec = recommend(
             test,
             unique_atoms=uniq,
@@ -298,7 +324,7 @@ def analyze_suite(
                 shared_atoms=sorted(set(behavior.atoms()) - set(uniq)),
                 recommendation=rec,
                 value_score=score,
-                is_critical_witness=bool(uniq_crit) or (behavior.critical and bool(uniq)),
+                is_critical_witness=classified["is_critical_witness"],
                 redundancy_max=round(max_redundancy[test.id], 6),
                 stale=test.is_stale(stale_days=cfg.stale_days),
                 conflict=test.id in conflict_ids,
@@ -312,11 +338,16 @@ def analyze_suite(
             extra.append("unique condition combination")
         if test.id in failure_unique:
             extra.append("unique failure history")
-        witness_summary = (
-            "Unique witness: " + ", ".join(_pretty(a) for a in uniq)
-            if uniq
-            else "No unique behavior atom; overlapping coverage."
-        )
+        if classified["is_unique_witness"]:
+            witness_summary = "Unique coverage witness: " + ", ".join(classified["kinds"][:4] or ["counterfactual"])
+            if uniq:
+                witness_summary += " | " + ", ".join(_pretty(a) for a in uniq[:6])
+        elif uniq:
+            witness_summary = "Distinctive atoms (anti-merge, not a coverage witness): " + ", ".join(
+                _pretty(a) for a in uniq[:6]
+            )
+        else:
+            witness_summary = "No unique behavior atom; overlapping coverage."
         if extra:
             witness_summary += " (" + ", ".join(extra) + ")"
         witnesses.append(
@@ -332,6 +363,11 @@ def analyze_suite(
                 unique_requirement=req_unique.get(test.id, []),
                 unique_failure_family=test.id in family_unique,
                 unique_boundary=test.id in boundary_unique,
+                is_unique_witness=classified["is_unique_witness"],
+                is_critical_witness=classified["is_critical_witness"],
+                witness_confidence=classified["witness_confidence"],
+                witness_kinds=classified["kinds"],
+                witness_evidence=classified["evidence"],
             )
         )
     removal_s = perf_counter() - t_rem
@@ -464,7 +500,7 @@ def build_maintenance(result: AnalysisResult) -> MaintenanceReport:
         candidate_merges=merges,
         candidate_retirements=retirements,
         stale_cases=stale,
-        unique_witnesses=[w for w in result.witnesses if w.unique_atoms],
+        unique_witnesses=[w for w in result.witnesses if w.is_unique_witness],
         critical_coverage=result.coverage.critical_coverage,
         estimated_suite_reduction=result.summary.estimated_ci_reduction,
         evidence=result.evidence,
@@ -511,8 +547,19 @@ def _unique_combos(tests, behaviors) -> set[str]:
 
 
 def _unique_failures(tests) -> set[str]:
-    failed = [t.id for t in tests if t.run_stats and t.run_stats.failures > 0]
-    return set(failed) if len(failed) == 1 else set()
+    env = {"timeout", "provider_error", "rate_limit", "http_5xx", "infrastructure", "network"}
+    real: list[str] = []
+    for test in tests:
+        stats = test.run_stats
+        if not stats or stats.failures <= 0:
+            continue
+        outcomes = [str(o).lower() for o in (stats.outcomes or [])]
+        if outcomes:
+            fails = [o for o in outcomes if o not in {"pass", "passed", "ok"}]
+            if fails and all(o in env for o in fails):
+                continue
+        real.append(test.id)
+    return set(real) if len(real) == 1 else set()
 
 
 def _unique_failure_families(tests) -> set[str]:

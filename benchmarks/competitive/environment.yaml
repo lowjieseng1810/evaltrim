@@ -16,12 +16,13 @@ python:
   version: "3.12.3"
   implementation: CPython
 node:
-  version: "v22.14.0"
-  npm: "10.9.7"
-  note: "Promptfoo 0.122.0 engines.node requires >=22.22.0; this host cannot run that release."
+  version: "v22.22.0 (isolated tarball under /tmp/evaltrim-comp/node)"
+  host_node: "v22.14.0"
+  npm: "10.9.4"
+  note: "Promptfoo 0.122.0 engines.node requires >=22.22.0; isolated Node 22.22.0 was used. Host Node was not downgraded."
 install_method:
   evaltrim: "PYTHONPATH=src (in-repo package)"
-  competitors: "pip install --target /tmp/comp-pkgs (no python3-venv on image)"
+  competitors: "isolated trees under /tmp/evaltrim-comp (pip --target / npm prefix / user-local dotnet); not the EvalTrim interpreter"
 network:
   egress_restricted: false
   default_evaltrim_network: false
@@ -75,44 +76,43 @@ competitors:
   promptfoo:
     display_name: Promptfoo
     repository: https://github.com/promptfoo/promptfoo
-    locked_version_attempted_latest: "0.122.0"
-    installation_attempted: "npm install -g promptfoo@0.122.0"
+    locked_version: "0.122.0"
+    installation: "isolated Node v22.22.0 + npm install promptfoo@0.122.0 under /tmp/evaltrim-comp/promptfoo"
     runtime_required_by_0_122_0: "Node >=22.22.0"
     host_node: "v22.14.0"
-    reproduced: false
-    failure: "engine mismatch — CLI did not run"
-    fallback_version_attempted: "0.120.0"
-    fallback_failure: "Database migration failed: Can't find meta/_journal.json (drizzle migrator)"
+    isolated_node: "v22.22.0"
+    reproduced: true
+    reproduction_scope: "echo provider eval; equals/contains/regex/not-contains; --no-share JSON export"
     redteam_plugins_documented: 157
     redteam_plugin_source: https://www.promptfoo.dev/docs/red-team/plugins/
     redteam_plugin_count_kind: "documented catalog size, not a live CLI count of a running binary"
-    network_behavior: "May call external providers for generation/grading depending on config"
-    external_api_requirements: "Provider keys when not using local providers"
 
   deepeval:
     display_name: DeepEval
     repository: https://github.com/confident-ai/deepeval
     pypi_package: deepeval
-    locked_version: "not installed"
-    pypi_latest_observed: "4.2.0"
-    reproduced: false
-    failure: "Not installed in this run (avoid pulling optional LLM/tracing stacks). No fabricated metrics."
+    locked_version: "4.2.0"
+    installation: "pip install --target /tmp/evaltrim-comp/pip-deepeval deepeval==4.2.0"
+    reproduced: true
+    reproduction_scope: "ExactMatchMetric + PatternMatchMetric. GEval/JsonCorrectness/ToolCorrectness LLM-DEPENDENT."
 
   inspect_ai:
     display_name: Inspect AI
     repository: https://github.com/UKGovernmentBEIS/inspect_ai
     pypi_package: inspect-ai
-    locked_version: "not installed"
-    pypi_latest_observed: "0.3.260"
-    reproduced: false
-    failure: "Not installed in this run. No fabricated metrics."
+    locked_version: "0.3.260"
+    installation: "pip install --target /tmp/evaltrim-comp/pip-inspect inspect-ai==0.3.260"
+    reproduced: true
+    reproduction_scope: "mockllm echo + exact scorer; sandbox not compared to EvalTrim subprocess sandbox"
 
   evalview:
     display_name: EvalView
     repository: https://github.com/hidai25/eval-view
-    locked_version: "not installed"
-    reproduced: false
-    failure: "No local CLI executed. Trajectory snapshot UX documented only."
+    pypi_package: evalview
+    locked_version: "0.8.1"
+    installation: "pip install --target /tmp/evaltrim-comp/pip-evalview evalview==0.8.1"
+    reproduced: true
+    reproduction_scope: "compare_to_golden on canned ExecutionTrace objects; live snapshot/check against a running agent not required for that cell"
 
   vercel_agent_eval:
     display_name: Vercel agent-eval
@@ -124,9 +124,12 @@ competitors:
 
   agentevalhq:
     display_name: AgentEvalHQ
-    repository: "public agent-eval collection (GitHub)"
-    locked_version: "not installed"
-    reproduced: false
+    repository: https://github.com/AgentEvalHQ/AgentEval
+    nuget_package: AgentEval
+    locked_version: "0.28.0-beta"
+    installation: "dotnet-install.sh 8.0.424 + nuget AgentEval --prerelease"
+    reproduced: true
+    reproduction_scope: "ResponseAssertions Contain/MatchPattern on canned strings; MAF/OpenAI not executed"
 
   langfuse:
     comparability: NOT_DIRECTLY_COMPARABLE

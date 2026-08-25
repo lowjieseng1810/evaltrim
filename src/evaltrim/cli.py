@@ -688,6 +688,7 @@ def portfolio(
     max_tests: int | None = typer.Option(None, "--max-tests"),
     max_cost: float | None = typer.Option(None, "--max-cost"),
     max_time_ms: float | None = typer.Option(None, "--max-time-ms"),
+    objective: str = typer.Option("compact", "--objective", help="compact|critical|cost|witness"),
     format: str = typer.Option("json", "--format"),
 ) -> None:
     """Greedy evaluation subset under budget. Prefers unique critical witnesses."""
@@ -699,9 +700,17 @@ def portfolio(
         loaded = _load(suite)
         result = analyze_suite(loaded)
         payload = named_portfolios(loaded, result, max_tests=max_tests, max_cost=max_cost, max_time_ms=max_time_ms)
+        key = {
+            "compact": "BEST_COMPACT_PORTFOLIO",
+            "critical": "BEST_CRITICAL_PORTFOLIO",
+            "cost": "BEST_COST_CONSTRAINED_PORTFOLIO",
+            "witness": "BEST_WITNESS_PORTFOLIO",
+        }.get(objective, "BEST_COMPACT_PORTFOLIO")
+        chosen = payload.get(key) or payload["BEST_COMPACT_PORTFOLIO"]
         payload = {
             **payload,
-            "selected": payload["BEST_COMPACT_PORTFOLIO"]["selected"],
+            "objective": objective,
+            "selected": chosen.get("selected", []),
             "pareto": payload["pareto"],
         }
     except EvalTrimError as exc:

@@ -18,20 +18,22 @@ def test_run_all_benchmarks_skips_competitive_dir():
 
 def test_competitive_harness_does_not_claim_superior():
     payload = run_competitive_harness(scale=[100], write_docs=False)
-    assert payload["competitive_status"]["status"] == "GAPS REMAIN"
+    status = payload["competitive_status"]["status"]
+    assert status in {"GAPS REMAIN", "VERIFIED PARITY ON MEASURED DIMENSIONS"}
+    assert status != "VERIFIED SUPERIOR ON MEASURED DIMENSIONS"
     assert payload["grader_head_to_head"]["evaltrim_accuracy"] == 1.0
     ae = payload["grader_head_to_head"]["agenteval_accuracy"]
     assert ae == 1.0 or ae == "UNMEASURED"
     for row in payload["metrics"]:
-        if "UNMEASURED" in str(row["AgentEval"]) or row["AgentEval"] == "UNMEASURED":
-            assert row["winner"] in {"UNMEASURED", "NOT DIRECTLY COMPARABLE"}
-        if row["AgentEval"] == "UNMEASURED":
+        if row.get("AgentEval") == "UNMEASURED":
             assert row["winner"] != "EvalTrim"
+        if "UNMEASURED" in str(row.get("AgentEval")) and row.get("AgentEval") == "UNMEASURED":
+            assert row["winner"] in {"UNMEASURED", "NOT DIRECTLY COMPARABLE", "TIE"}
 
 
 def test_cli_benchmark_competitive_json():
     result = runner.invoke(app, ["benchmark", "competitive", "--format", "json", "--scale", "100"])
     assert result.exit_code == 0, result.stdout
-    assert "GAPS REMAIN" in result.stdout
-    assert "UNMEASURED" in result.stdout
     assert "evaltrim_version" in result.stdout
+    assert "UNMEASURED" in result.stdout
+    assert "GAPS REMAIN" in result.stdout or "VERIFIED PARITY ON MEASURED DIMENSIONS" in result.stdout

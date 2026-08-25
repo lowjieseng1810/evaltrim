@@ -417,6 +417,11 @@ class WitnessRecord(BaseModel):
     unique_requirement: list[str] = Field(default_factory=list)
     unique_failure_family: bool = False
     unique_boundary: bool = False
+    is_unique_witness: bool = False
+    is_critical_witness: bool = False
+    witness_confidence: float = 0.0
+    witness_kinds: list[str] = Field(default_factory=list)
+    witness_evidence: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidenceLedger(BaseModel):
