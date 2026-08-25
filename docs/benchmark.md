@@ -1,34 +1,35 @@
 # Benchmarks
 
-Quality and scale numbers for **0.7.0** are measured, not invented. See also the README, `RELEASE_AUDIT.md`, and `docs/competitive-results.md`.
+Quality and scale numbers for **0.9.0** are measured, not invented. See also the README, `RELEASE_AUDIT.md`, and `docs/competitive-results.md`.
 
-## Quality (v0.7.0, no LLM, embeddings off, `EVALTRIM_NO_CACHE=1`)
+## Quality (v0.9.0, no LLM, embeddings off, `EVALTRIM_NO_CACHE=1`)
 
-| Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
-| --- | --- | --- | --- | --- | --- | --- |
-| coding_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 0.46 |
-| customer_support | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 0.25 |
-| shopping_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 0.40 |
+Immutable metadata on coding / customer_support / shopping was not rewritten.
 
-Same as v0.6.0 on this harness. Ground truth files were not rewritten.
+| Suite | Precision | Recall | F1 | Retirement safety | Critical coverage |
+| --- | --- | --- | --- | --- | --- |
+| coding_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| customer_support | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| shopping_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| robustness | n/a (no pair labels) | n/a | n/a | 1.0 | 1.0 |
 
-v0.4.0 customer_support recall was 0.875. Precision and safety stayed 1.0 after the recall fix.
+Paraphrase vs hard-negative semantic checks live in `tests/test_v09.py`.
 
 ## Scale (synthetic, cold, `EVALTRIM_NO_CACHE=1`)
 
-v0.6.0 5k: **249.3s**, 174694 pairs, 10k not completed.
+v0.7.0 10k: **436.8s**. v0.9.0 10k: **56.7s** (indexed unique-critical + sim cache + no tier-2 hashing above 400 tests).
 
-v0.7.0 (DF-capped blocking):
+| n | runtime | peak MiB | pairs | simulations_executed | removal_s | similarity_s |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 | 5.42 | 9.6 | 4950 | 1 | 0.06 | 5.28 |
+| 500 | 11.17 | 72.1 | 19856 | 1 | 0.52 | 10.26 |
+| 1000 | 16.19 | 101.1 | 27379 | 1 | 0.74 | 14.58 |
+| 5000 | **38.94** | 257.5 | 59840 | 1 | 2.82 | 31.96 |
+| 10000 | **56.75** | 409.2 | 76205 | 1 | 5.35 | 41.64 |
 
-| n | runtime | peak MiB | pairs | removal_s | similarity_s |
-| --- | --- | --- | --- | --- | --- |
-| 100 | 2.65 | 8.2 | 4950 | 0.09 | 2.50 |
-| 500 | 11.51 | 72.0 | 19856 | 1.42 | 9.61 |
-| 1000 | 19.44 | 100.9 | 27379 | 4.40 | 13.78 |
-| 5000 | **133.4** | 257.1 | 59840 | 97.66 | 30.60 |
-| 10000 | **436.8** | 408.6 | 76205 | 387.45 | 38.33 |
+`simulations_executed=1` on this generator means equivalent-class reuse: most synthetic tests share an empty unique-atom signature. Safety math is unchanged; constructed-suite P/R/safety stayed 1.0.
 
-10k completes. Remaining cost is per-test counterfactual simulation, not candidate generation.
+n=100 is slower than v0.7 because tier-2 hashing runs on small suites.
 
 Command:
 

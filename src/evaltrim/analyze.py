@@ -235,7 +235,7 @@ def analyze_suite(
         if len(sim_cache) > before:
             simulations_run += 1
         uniq = unique.get(test.id, [])
-        uniq_crit = _unique_critical(test.id, behavior, tests, behaviors, declared, uniq)
+        uniq_crit = _unique_critical_indexed(rem_index, test.id, behavior, uniq)
         if test.id in req_unique:
             uniq_crit = sorted(set(uniq_crit) | {f"requirement:{r}" for r in req_unique[test.id]})
         components = value_components(
@@ -530,6 +530,21 @@ def _unique_requirements(suite: TestSuite) -> dict[str, list[str]]:
         if len(holders) == 1:
             mapping[holders[0]].append(req.id)
     return dict(mapping)
+
+
+def _unique_critical_indexed(index: RemovalIndex, test_id: str, behavior, unique_atoms: list[str]) -> list[str]:
+    declared_norm = {d.lower().replace(" ", "_") for d in index.declared}
+    hits = []
+    for name, holders in index.critical_holders.items():
+        if len(holders) == 1 and test_id in holders:
+            hits.append(name.lower().replace(" ", "_"))
+    if behavior.critical and index.critical_test_ids == {test_id}:
+        hits.append("critical")
+    for atom in unique_atoms:
+        name = atom.split(":", 1)[-1]
+        if name in declared_norm and name not in hits:
+            hits.append(atom)
+    return hits
 
 
 def _unique_critical(

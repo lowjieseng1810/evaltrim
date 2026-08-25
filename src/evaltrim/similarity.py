@@ -203,7 +203,7 @@ class SimilarityEngine:
         self._index = {t.id: i for i, t in enumerate(tests)}
         self._norm_tokens = [tokenize_normalized(t.input) for t in tests]
         self._tf_vecs = [_tf_vector(toks) for toks in self._norm_tokens]
-        self._tier2 = HashingNgramEncoder(dims=128)
+        self._tier2 = HashingNgramEncoder(dims=128) if len(tests) <= 400 else None
 
     def _lexical(self, i: int, j: int) -> float:
         left, right = self.tests[i].input, self.tests[j].input
@@ -245,6 +245,11 @@ class SimilarityEngine:
         """Return (score, tier_used, semantic_confidence). Tier 3 is optional encoder."""
         left, right = self.tests[i].input, self.tests[j].input
         tier1 = self._lexical(i, j)
+        if self._tier2 is None and self.encoder is None:
+            return tier1, "tier1_lexical", 0.7
+        if self._tier2 is None:
+            encoded = float(self.encoder.similarity(left, right))  # type: ignore[attr-defined]
+            return min(1.0, 0.70 * tier1 + 0.30 * encoded), "tier3_optional", 0.75
         tier2 = float(self._tier2.similarity(left, right))
         blended = min(1.0, 0.86 * tier1 + 0.14 * tier2)
         agreement = 1.0 - min(1.0, abs(tier1 - tier2))

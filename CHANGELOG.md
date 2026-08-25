@@ -11,7 +11,7 @@ Internal maturity pass (engineering target, not a public 9/10 score).
 - Provider-neutral red-team families expanded; curated local probes with detection/FP/reproducibility
 - Declarative YAML scenarios (personas, state, branch, tool, assert)
 - Local sandbox: env allowlist, timeouts, output caps, escape tests; labeled LOCAL SANDBOX not a VM
-- Counterfactual equivalence-class cache (same safety math)
+- Counterfactual equivalence-class cache **and** O(n) unique-critical indexing (10k **56.7s**, was 436.8s)
 - Compact WHAT/WHY/EVIDENCE/RISK/ACTION reports; `--verbose` proof nodes with stable evidence IDs
 - Visible `ValueWeights`; named portfolios BEST COMPACT / CRITICAL / COST-CONSTRAINED
 - `evaltrim doctor` checks sandbox, config, optional deps, embeddings, GitHub

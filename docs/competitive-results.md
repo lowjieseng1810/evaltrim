@@ -1,6 +1,12 @@
 # Competitive results
 
-EvalTrim **0.7.0**.
+EvalTrim **0.9.0**.
+
+EvalTrim numbers are measured in this process. Competitor columns are UNMEASURED unless a public benchmark was reproduced in benchmarks/competitive/. Do not treat UNMEASURED as a win.
+
+Internal maturity labels (Parity / Strong parity / Leading / Not comparable) live in `docs/internal-scorecard.md` and `docs/competitive-benchmark.md`. They are not marketing claims.
+
+Constructed-suite precision/recall/F1/retirement safety/critical coverage remain **1.0** on coding, customer_support, and shopping (immutable metadata). Scale: 5k **38.94s**, 10k **56.75s**. Competitor runtime on the same generator: **UNMEASURED**.
 
 EvalTrim numbers are measured in this process. Competitor columns are UNMEASURED unless a public benchmark was reproduced in benchmarks/competitive/. Do not treat UNMEASURED as a win.
 

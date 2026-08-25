@@ -1,6 +1,8 @@
-# Competitive benchmark (Phase 0 audit)
+# Competitive benchmark (capability audit)
 
-EvalTrim 0.7 compares **developer-facing evaluation capabilities**, not SaaS dashboards, hosted traces, or marketing copy.
+EvalTrim 0.9 compares **developer-facing evaluation capabilities**, not SaaS dashboards, hosted traces, or marketing copy.
+
+For each row, internally we also track: maturity (Parity / Strong parity / Leading / Not comparable), test coverage in this repo, known gap, whether head-to-head numbers are comparable, and the next improvement. Competitor **metrics** stay **UNMEASURED** unless reproduced.
 
 Rules used here:
 

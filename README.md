@@ -153,11 +153,11 @@ Latest measured numbers:
 
 | n | runtime | peak MiB | pairs |
 | --- | --- | --- | --- |
-| 100 | 2.65s | 8.2 | 4950 |
-| 500 | 11.51s | 72 | 19856 |
-| 1000 | 19.44s | 101 | 27379 |
-| 5000 | **133.4s** (was 249.3s in 0.6.0) | 257 | 59840 |
-| 10000 | **436.8s** (not completed in 0.6.0) | 409 | 76205 |
+| 100 | 5.42s | 9.6 | 4950 |
+| 500 | 11.17s | 72.1 | 19856 |
+| 1000 | 16.19s | 101.1 | 27379 |
+| 5000 | **38.94s** (was 133.4s in 0.7.0) | 257.5 | 59840 |
+| 10000 | **56.75s** (was 436.8s in 0.7.0) | 409.2 | 76205 |
 
 Details: [docs/benchmark.md](docs/benchmark.md).
 
@@ -185,6 +185,7 @@ Deferred on purpose: IDE plugins, full MCP platform, self-healing, automatic rep
 - [Competitive audit](docs/competitive-benchmark.md)
 - [Taxonomy A–AP](docs/taxonomy.md)
 - [Competitive results](docs/competitive-results.md)
+- [Internal scorecard](docs/internal-scorecard.md) (engineering self-assessment, not a public rating)
 - [Limitations](docs/limitations.md)
 - [Changelog](CHANGELOG.md)
 - [Release audit](RELEASE_AUDIT.md)
