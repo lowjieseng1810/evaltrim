@@ -1,57 +1,33 @@
 # Benchmarks
 
-Constructed suites live under `benchmarks/`:
-
-- `customer_support/`
-- `coding_agent/`
-- `shopping_agent/`
-
-Each directory has `suite.yaml` plus `benchmark_metadata.yaml` describing intended redundant groups, unique witnesses, and critical cases.
-
-## Runner
+Constructed suites: `benchmarks/{coding_agent,customer_support,shopping_agent}/`.
 
 ```bash
 evaltrim benchmark benchmarks
-evaltrim benchmark benchmarks/customer_support/suite.yaml --format json
+evaltrim benchmark benchmarks --scale 100,500,1000,5000
 ```
 
-Measured fields:
+## Quality (v0.4.0, no LLM, embeddings off)
 
-- redundancy precision / recall (pair-level vs ground truth)
-- unique-witness precision / recall when listed
-- retirement safety rate (1.0 if no expected critical case is marked RETIRE)
-- critical coverage
-- estimated suite reduction (MERGE + RETIRE share)
-- runtime
-- deterministic repeatability (two full analyses compare equal)
+| Suite | P | R | F1 | Retirement safety | Critical coverage | Reduction |
+|---|---|---|---|---|---|---|
+| coding_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 46% |
+| customer_support | 1.0 | 0.875 | 0.93 | 1.0 | 1.0 | 19% |
+| shopping_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 40% |
 
-## Target metrics (goals, not claims)
+v0.2.0 recall on the previous (smaller) suites was 0.50 / 0.40 / 0.25 with precision 1.0.
 
-| Goal | Target |
-| --- | --- |
-| Redundancy precision | ≥ 90% |
-| Critical coverage preservation | 100% on constructed suites |
-| Suite reduction | 20–40% on constructed suites |
-| Runtime | < 60s for 1000 cases, excluding LLM |
-| Repeatability | equivalent output on the same input |
+Missed customer_support pair: lexical paraphrase `parcel is late` vs `parcel arrived late` (MERGE requires high semantic + full behavior overlap + similar expected). Hard negatives are **not** merged.
 
-Measured scale fixtures (`evaltrim benchmark benchmarks --scale 100,500,1000`, generated suites, no LLM, hashing embeddings off, 2026-08-25, v0.2.0):
+Reduction is a review-queue share (MERGE+RETIRE), not deletions.
 
-| n | runtime | peak MiB | candidate pairs |
-| --- | --- | --- | --- |
-| 100 | 0.92s | 3.85 | 4950 (full pairwise) |
-| 500 | 6.56s | 18.16 | 19443 (blocked) |
-| 1000 | 19.67s | 35.84 | 36484 (blocked) |
+## Scale (synthetic, 2026-08-25)
 
-10000 was not run in this pass. Bottleneck is similarity on candidate pairs plus per-test simulation bookkeeping, not a naive 1000² full matrix once n>200 (`full_pairwise_limit`).
+| n | runtime | peak MiB | pairs |
+|---|---|---|---|
+| 100 | 2.68s | 7.3 | 4950 |
+| 500 | 15.09s | 75.5 | 21840 |
+| 1000 | 35.69s | 136.5 | 38881 |
+| 5000 | 466.7s | 614.7 | 174694 |
 
-## Quality suites (constructed)
-
-Latest `evaltrim benchmark benchmarks` on this checkout (no LLM, embeddings off, v0.2.0):
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| coding_agent | 12 | 1.0 | 1.0 | 1.0 | 33% | yes | ~3ms |
-| customer_support | 14 | 1.0 | 1.0 | 1.0 | 36% | yes | ~7ms |
-| shopping_agent | 14 | 1.0 | 1.0 | 1.0 | 14% | yes | ~4ms |
-
-Recall vs constructed groups is lower than precision (near-paraphrases are not always grouped). Shopping reduction is below the 20–40% *target band*. Treat the table as a snapshot, not a product claim.
-
+10,000 not run. Bottleneck at 5,000: per-test removal simulation (~315s).

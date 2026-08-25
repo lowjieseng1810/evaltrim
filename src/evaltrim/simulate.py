@@ -11,6 +11,7 @@ from evaltrim.models import (
     RemovalSimulation,
     SafetyPolicies,
     TestCase,
+    TestSuite,
     Verdict,
 )
 
@@ -24,6 +25,7 @@ def simulate_removal(
     baseline: CoverageResult | None = None,
     policies: SafetyPolicies | None = None,
     unique: dict[str, list[str]] | None = None,
+    suite: TestSuite | None = None,
 ) -> RemovalSimulation:
     ids = {t.id for t in tests}
     if test_id not in ids:
@@ -108,6 +110,36 @@ def simulate_removal(
         verdict = Verdict.SAFE_TO_RETIRE
         reasons.append("No unique behavior-atom or critical coverage loss.")
 
+    lost_reqs: list[str] = []
+    if suite is not None:
+        for req in suite.requirements:
+            req_holders = [t.id for t in tests if req.id in t.requirement_ids]
+            if req_holders == [test_id]:
+                lost_reqs.append(req.id)
+                if req.critical:
+                    verdict = Verdict.KEEP
+                    reasons.append(f"Only remaining witness for critical requirement `{req.id}`.")
+    hist = 0.0
+    target = next((t for t in tests if t.id == test_id), None)
+    if target and target.run_stats:
+        hist = float(target.run_stats.failures)
+    if hist > 0 and verdict == Verdict.SAFE_TO_RETIRE:
+        verdict = Verdict.REVIEW
+        reasons.append("Historical failures exist; removal is UNCERTAIN without review.")
+    if target and target.behavior and target.behavior.source == "heuristic" and target.behavior.confidence < 0.5:
+        if verdict == Verdict.SAFE_TO_RETIRE:
+            verdict = Verdict.UNCERTAIN
+            reasons.append("Behavior signature is low-confidence; counterfactual is UNCERTAIN.")
+
+    evidence = {
+        "unique_witnesses_lost": len(lost_atoms),
+        "critical_coverage_lost": round(max(0.0, before.critical_coverage - after.critical_coverage), 6),
+        "requirement_coverage_lost": len(lost_reqs),
+        "historical_failure_contribution": hist,
+        "counterfactual_coverage_loss": round(max(0.0, drop), 6),
+        "verdict": verdict.value,
+    }
+
     return RemovalSimulation(
         test_id=test_id,
         before_tests=len(tests),
@@ -121,8 +153,12 @@ def simulate_removal(
         unique_witnesses_after=remaining_unique,
         critical_by_name_before=dict(before.critical_by_name),
         critical_by_name_after=dict(after.critical_by_name),
+        lost_requirement_ids=lost_reqs,
+        historical_failure_contribution=hist,
+        counterfactual_coverage_loss=round(max(0.0, drop), 6),
         verdict=verdict,
         reasons=reasons,
+        evidence=evidence,
     )
 
 

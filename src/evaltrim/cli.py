@@ -23,6 +23,7 @@ from evaltrim.regression.snapshot import list_snapshots, load_analysis, save_ana
 from evaltrim.reports import (
     maintenance_to_json,
     render_github_comment,
+    render_html,
     render_maintenance_markdown,
     render_markdown,
     render_simulation_markdown,
@@ -174,7 +175,7 @@ def validate(suite: Path = typer.Argument(..., help="Path to YAML or JSON suite.
 @app.command()
 def analyze(
     suite: Path = typer.Argument(..., help="Path to YAML or JSON suite."),
-    format: str = typer.Option("markdown", "--format", help="markdown|json|github|table"),
+    format: str = typer.Option("markdown", "--format", help="markdown|json|github|table|html"),
     output: Path | None = typer.Option(None, "--output", "-o", help="Write report to this path."),
     strict: bool = typer.Option(False, "--strict", help="Fail on policy violations."),
 ) -> None:
@@ -189,6 +190,8 @@ def analyze(
         text = result_to_json(result)
     elif format == "github":
         text = render_github_comment(result)
+    elif format == "html":
+        text = render_html(result)
     elif format == "table":
         _print_table(result)
         text = None
@@ -328,7 +331,9 @@ def _benchmark_markdown(payload: dict) -> str:
         lines.append(f"- runtime_seconds: {row.get('runtime_seconds')}")
         lines.append(f"- deterministic: {row.get('deterministic')}")
         lines.append(f"- redundancy_precision: {row.get('redundancy_precision')}")
-        lines.append(f"- redundancy_recall: {row.get('redundancy_recall')}")
+        lines.append(f"- redundancy_f1: {row.get('redundancy_f1')}")
+        lines.append(f"- false_positive_rate: {row.get('false_positive_rate')}")
+        lines.append(f"- false_retirement_rate: {row.get('false_retirement_rate')}")
         lines.append(f"- retirement_safety_rate: {row.get('retirement_safety_rate')}")
         lines.append(f"- critical_coverage: {row.get('critical_coverage')}")
         lines.append(f"- suite_reduction: {row.get('suite_reduction')}")
@@ -516,6 +521,218 @@ def _print_diff(diff: dict, format: str) -> None:
     console.print(f"Removed behaviors: {len(atoms['removed'])}")
     console.print(f"Potential suite-diff risk: {diff['suite_diff_risk']}")
     console.print(diff["note"])
+
+
+@app.command("impacted-tests")
+def impacted_tests_cmd(
+    suite: Path = typer.Argument(..., help="Suite YAML/JSON"),
+    changed_paths: list[str] = typer.Argument(..., help="Changed file paths"),
+    format: str = typer.Option("json", "--format", help="json|table"),
+) -> None:
+    """Heuristic impacted-test selection. Not perfect dependency analysis."""
+    import json
+
+    from evaltrim.impacted import impacted_tests
+
+    try:
+        loaded = _load(suite)
+        rows = impacted_tests(loaded, changed_paths)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        payload = {"tests": rows, "note": "Heuristic priorities; not a complete call graph."}
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    for row in rows:
+        console.print(f"{row['priority']:14} {row['test_id']}")
+
+
+@app.command()
+def health(
+    suite: Path = typer.Argument(...),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Heuristic suite health scores (composite + components)."""
+    import json
+
+    from evaltrim.intelligence.health import suite_health
+
+    try:
+        loaded = _load(suite)
+        result = analyze_suite(loaded)
+        payload = suite_health(loaded, result)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print(f"Composite (heuristic): {payload['composite']}")
+    for name, value in payload["components"].items():
+        console.print(f"- {name}: {value}")
+    console.print(payload["note"])
+
+
+@app.command()
+def debt(
+    suite: Path = typer.Argument(...),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Evaluation debt report. Never deletes tests."""
+    import json
+
+    from evaltrim.intelligence.debt import evaluation_debt
+
+    try:
+        loaded = _load(suite)
+        result = analyze_suite(loaded)
+        payload = evaluation_debt(loaded, result)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print(f"# {payload['title']}")
+    console.print(f"Open items: {payload['open_item_count']}")
+    for item in payload["items"]:
+        console.print(f"- {item['kind']}: {len(item['ids'])}")
+    console.print(payload["note"])
+
+
+@app.command()
+def portfolio(
+    suite: Path = typer.Argument(...),
+    max_tests: int | None = typer.Option(None, "--max-tests"),
+    max_cost: float | None = typer.Option(None, "--max-cost"),
+    max_time_ms: float | None = typer.Option(None, "--max-time-ms"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Greedy evaluation subset under budget. Prefers unique critical witnesses."""
+    import json
+
+    from evaltrim.intelligence.portfolio import select_portfolio
+
+    try:
+        loaded = _load(suite)
+        result = analyze_suite(loaded)
+        payload = select_portfolio(loaded, result, max_tests=max_tests, max_cost=max_cost, max_time_ms=max_time_ms)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print("Selected: " + ", ".join(payload["selected"]))
+    console.print(payload["note"])
+
+
+@app.command()
+def watch(
+    suite: Path = typer.Argument(..., help="Suite to re-analyze on change"),
+    root: Path = typer.Option(Path("."), "--root"),
+    debounce_s: float = typer.Option(0.75, "--debounce"),
+    once: bool = typer.Option(False, "--once", help="Scan targets and exit (no loop)."),
+) -> None:
+    """Watch prompts/evals/code/tools/policies and rerun impacted analysis. Debounced."""
+    from evaltrim.impacted import impacted_tests
+    from evaltrim.watch import watch_loop, watch_once, watch_targets
+
+    loaded = _load(suite)
+
+    def _run(paths: list[str]) -> None:
+        rows = impacted_tests(loaded, paths)
+        critical = [r["test_id"] for r in rows if r["priority"] in {"DIRECT", "CRITICAL", "ADJACENT"}]
+        console.print(f"Changed: {len(paths)} paths; impacted (non-low): {len(critical)}")
+        result = analyze_suite(_load(suite))
+        console.print(
+            f"KEEP {result.summary.keep} MERGE {result.summary.merge} "
+            f"RETIRE {result.summary.retire} REVIEW {result.summary.review}"
+        )
+
+    if once:
+        targets = watch_targets(root)
+        console.print(f"Watching {len(targets)} files under {root} (once)")
+        watch_once(root)
+        return
+    console.print(f"Watching {root} (debounce {debounce_s}s). Ctrl-C to stop.")
+    watch_loop(root, debounce_s=debounce_s, on_change=_run)
+
+
+@app.command("ingest-failure")
+def ingest_failure_cmd(
+    source: Path = typer.Argument(..., help="JSON production failure record"),
+    suite: Path = typer.Argument(..., help="Existing suite"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Build a candidate test from a production failure. Does not append it."""
+    import json
+
+    from evaltrim.ingest import candidate_from_failure, evaluate_failure_candidate
+
+    try:
+        record = json.loads(source.read_text(encoding="utf-8"))
+        loaded = _load(suite)
+        candidate = candidate_from_failure(record)
+        payload = evaluate_failure_candidate(loaded, candidate)
+    except EvalTrimError as exc:
+        _fail(exc)
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+
+
+@app.command("compare-runs")
+def compare_runs_cmd(
+    baseline: Path = typer.Argument(..., help="Baseline run JSON"),
+    current: Path = typer.Argument(..., help="Current run JSON"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Compare recorded runs. Not every difference is a regression."""
+    import json
+
+    from evaltrim.regression.runs import compare_runs
+
+    def _cases(path: Path) -> list:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "cases" in data:
+            return data["cases"]
+        if isinstance(data, list):
+            return data
+        return [data]
+
+    payload = compare_runs(_cases(baseline), _cases(current))
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+
+
+@app.command("ingest-traces")
+def ingest_traces_cmd(
+    source: Path = typer.Argument(..., help="Trace JSON or JSONL"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Normalize session/turn/model/tool traces."""
+    import json
+
+    from evaltrim.traces import load_traces
+
+    try:
+        traces = load_traces(source)
+    except EvalTrimError as exc:
+        _fail(exc)
+    sys.stdout.write(json.dumps([t.model_dump(mode="json") for t in traces], indent=2, default=str) + "\n")
+
+
+@app.command("flake-report")
+def flake_report_cmd(
+    suite: Path = typer.Argument(...),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Classify STABLE/FLAKY/DEGRADED/QUARANTINED. Never deletes tests."""
+    import json
+
+    from evaltrim.flake import flake_report
+
+    try:
+        loaded = _load(suite)
+        rows = flake_report(loaded.tests)
+    except EvalTrimError as exc:
+        _fail(exc)
+    sys.stdout.write(json.dumps({"tests": rows, "note": "Flaky tests are never auto-deleted."}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

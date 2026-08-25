@@ -25,7 +25,7 @@ def test_paraphrase_refund_is_related():
     ]
     engine = SimilarityEngine(tests, beh, RedundancyWeights())
     pair = engine.pair_score("a", "b")
-    assert float(pair["semantic"]) >= 0.45
+    assert float(pair["semantic"]) >= 0.82
     assert normalize_text(tests[0].input).count("refund")
     assert "amt_600" in normalize_text(tests[1].input)
 

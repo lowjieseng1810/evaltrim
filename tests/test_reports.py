@@ -42,8 +42,9 @@ def test_github_comment_is_short():
     result = analyze_suite(_mini())
     comment = render_github_comment(result)
     assert comment.startswith("## EvalTrim")
-    assert "tests analyzed" in comment
-    assert "Critical behavior coverage" in comment
+    assert "KEEP" in comment
+    assert "Critical coverage" in comment
+    assert "never deletes" in comment
     assert len(comment) < 2000
 
 

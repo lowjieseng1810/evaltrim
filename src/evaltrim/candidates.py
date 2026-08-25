@@ -5,19 +5,29 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 
+from evaltrim.embeddings import SemanticEncoder
 from evaltrim.models import Behavior, TestCase
 from evaltrim.normalize import normalize_text
 from evaltrim.similarity import tokenize
 
 
 class CandidatePairGenerator:
-    """Layer 1 blocking: exact hash, behavior signature, inverted-index neighbors."""
+    """Layered blocking: exact hash → lexical → behavior → TF/n-gram → optional embeddings.
+
+    Similarity may create candidates. It never authorizes RETIRE by itself.
+    """
 
     def __init__(self, *, full_pairwise_limit: int = 200, neighbor_k: int = 40) -> None:
         self.full_pairwise_limit = full_pairwise_limit
         self.neighbor_k = neighbor_k
 
-    def pairs(self, tests: Sequence[TestCase], behaviors: Sequence[Behavior]) -> list[tuple[int, int]]:
+    def pairs(
+        self,
+        tests: Sequence[TestCase],
+        behaviors: Sequence[Behavior],
+        *,
+        encoder: SemanticEncoder | None = None,
+    ) -> list[tuple[int, int]]:
         n = len(tests)
         if n <= 1:
             return []
@@ -32,7 +42,7 @@ class CandidatePairGenerator:
             a, b = (i, j) if i < j else (j, i)
             found.add((a, b))
 
-        # Exact normalized-input groups.
+        # 1. Exact / hash dedup on normalized input.
         by_hash: dict[str, list[int]] = defaultdict(list)
         for i, test in enumerate(tests):
             by_hash[normalize_text(test.input)].append(i)
@@ -41,18 +51,39 @@ class CandidatePairGenerator:
                 for b in range(a + 1, len(group)):
                     add(group[a], group[b])
 
-        # Same behavior signature groups (capped).
+        # 2. Lexical blocking: same normalized prefix (near-dup wording).
+        by_prefix: dict[str, list[int]] = defaultdict(list)
+        for i, test in enumerate(tests):
+            prefix = normalize_text(test.input)[:24]
+            if prefix:
+                by_prefix[prefix].append(i)
+        for group in by_prefix.values():
+            if len(group) > 60:
+                group = group[:60]
+            for a in range(len(group)):
+                for b in range(a + 1, len(group)):
+                    add(group[a], group[b])
+
+        # 3. Behavior-based blocking (full signature and domain+action).
         by_sig: dict[tuple[str, ...], list[int]] = defaultdict(list)
+        by_da: dict[tuple[str, str], list[int]] = defaultdict(list)
         for i, behavior in enumerate(behaviors):
             by_sig[tuple(behavior.atoms())].append(i)
+            by_da[(behavior.domain, behavior.action)].append(i)
         for group in by_sig.values():
             if len(group) > 80:
                 group = group[:80]
             for a in range(len(group)):
                 for b in range(a + 1, len(group)):
                     add(group[a], group[b])
+        for group in by_da.values():
+            if len(group) > 50:
+                group = group[:50]
+            for a in range(len(group)):
+                for b in range(a + 1, len(group)):
+                    add(group[a], group[b])
 
-        # Inverted index on normalized tokens (rare-ish terms first).
+        # 4. TF / n-gram inverted-index retrieval.
         postings: dict[str, list[int]] = defaultdict(list)
         tokens_by_doc = [tokenize(normalize_text(t.input) + " " + t.input.lower()) for t in tests]
         for i, toks in enumerate(tokens_by_doc):
@@ -73,5 +104,20 @@ class CandidatePairGenerator:
             neighbors = sorted(scores, key=lambda j: (-scores[j], j))[: self.neighbor_k]
             for j in neighbors:
                 add(i, j)
+
+        # 5. Optional embedding retrieval (creates candidates only).
+        if encoder is not None:
+            vectors = [encoder.encode(t.input) for t in tests]
+            from evaltrim.similarity import cosine
+
+            for i, vec in enumerate(vectors):
+                ranked: list[tuple[float, int]] = []
+                for j, other in enumerate(vectors):
+                    if j == i:
+                        continue
+                    ranked.append((cosine(vec, other), j))
+                ranked.sort(key=lambda item: (-item[0], item[1]))
+                for _, j in ranked[: min(12, self.neighbor_k)]:
+                    add(i, j)
 
         return sorted(found)

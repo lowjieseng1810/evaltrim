@@ -12,8 +12,11 @@ Given a candidate id:
 ## Verdicts
 
 - `SAFE_TO_RETIRE` — no lost behavior atoms and no critical coverage drop.
-- `KEEP` — the case uniquely protects behavior, especially critical behavior.
-- `REVIEW` is reserved for recommendation policy when oracles conflict; simulation itself is KEEP vs SAFE_TO_RETIRE.
+- `KEEP` — the case uniquely protects behavior, a critical requirement, or critical coverage.
+- `REVIEW` — coverage drop exceeds policy, or historical failures exist.
+- `UNCERTAIN` — low-confidence heuristic behavior signature.
+
+JSON `evidence` records unique witnesses lost, critical/requirement coverage lost, historical failure contribution, and counterfactual coverage loss.
 
 ## CLI
 

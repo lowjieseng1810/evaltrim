@@ -29,10 +29,15 @@ def recommend(
     value_score: float,
     boundary_unique: bool = False,
     unique_combo: bool = False,
+    unique_failure: bool = False,
+    unique_failure_family: bool = False,
+    unique_requirement: list[str] | None = None,
     oracle_status: OracleStatus = OracleStatus.TRUSTED,
     lifecycle: Lifecycle = Lifecycle.ACTIVE,
     policies: SafetyPolicies | None = None,
+    merge_candidate: bool = False,
 ) -> Recommendation:
+    unique_requirement = unique_requirement or []
     policies = policies or SafetyPolicies()
     reasons: list[str] = []
     pair_ids: list[str] = []
@@ -47,6 +52,16 @@ def recommend(
             reasons=reasons,
             value_score=value_score,
             confidence=0.99,
+        )
+
+    if unique_requirement:
+        reasons.append("Unique remaining witness for requirement(s): " + ", ".join(unique_requirement))
+        return Recommendation(
+            test_id=test.id,
+            state=RecommendationState.KEEP,
+            reasons=reasons,
+            value_score=value_score,
+            confidence=0.97,
         )
 
     high_risk_oracle = oracle_status in {OracleStatus.CONFLICT, OracleStatus.REVIEW} or conflict
@@ -65,6 +80,9 @@ def recommend(
             confidence=0.55,
         )
 
+    if oracle_status == OracleStatus.STALE:
+        reasons.append("Oracle provenance is stale; never RETIRE while the oracle is uncertain.")
+
     if unique_combo:
         reasons.append("Unique combination of behavior conditions.")
         return Recommendation(
@@ -73,6 +91,16 @@ def recommend(
             reasons=reasons,
             value_score=value_score,
             confidence=0.9,
+        )
+
+    if unique_failure or unique_failure_family:
+        reasons.append("Unique historical failure or failure-family witness.")
+        return Recommendation(
+            test_id=test.id,
+            state=RecommendationState.KEEP,
+            reasons=reasons,
+            value_score=value_score,
+            confidence=0.92,
         )
 
     if boundary_unique:
@@ -87,8 +115,8 @@ def recommend(
 
     unique_meaningful = [a for a in unique_atoms if not a.startswith("state:")]
     removal_safe = simulation.verdict == Verdict.SAFE_TO_RETIRE and not simulation.lost_atoms
-    highly_redundant = redundancy_max >= merge_threshold
-    redundant = redundancy_max >= redundancy_threshold
+    highly_redundant = redundancy_max >= merge_threshold or merge_candidate
+    redundant = redundancy_max >= redundancy_threshold or merge_candidate
 
     if unique_meaningful:
         reasons.append("Unique behavioral witness: " + ", ".join(_human_atom(a) for a in unique_meaningful[:6]))
@@ -110,7 +138,7 @@ def recommend(
             confidence=0.88,
         )
 
-    if simulation.verdict == Verdict.REVIEW:
+    if simulation.verdict in {Verdict.REVIEW, Verdict.UNCERTAIN}:
         reasons.extend(simulation.reasons)
         return Recommendation(
             test_id=test.id,
@@ -121,7 +149,7 @@ def recommend(
         )
 
     # High semantic similarity alone never retires; require overlap + safe removal + stale.
-    if highly_redundant and removal_safe and stale:
+    if highly_redundant and removal_safe and stale and oracle_status == OracleStatus.TRUSTED:
         confidence = 0.8
         if confidence < policies.minimum_retirement_confidence:
             reasons.append(
@@ -151,6 +179,8 @@ def recommend(
     if highly_redundant and removal_safe:
         reasons.append("Highly redundant with no unique behavioral contribution.")
         reasons.append("Prefer merging overlapping cases rather than deleting without review.")
+        if oracle_status == OracleStatus.STALE:
+            reasons.append("Stale oracle: MERGE rather than RETIRE.")
         return Recommendation(
             test_id=test.id,
             state=RecommendationState.MERGE,

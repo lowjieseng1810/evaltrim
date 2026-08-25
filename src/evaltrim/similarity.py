@@ -10,7 +10,7 @@ from collections.abc import Iterable, Sequence
 from typing import TypedDict
 
 from evaltrim.models import Behavior, RedundancyWeights, RunStats, TestCase
-from evaltrim.normalize import char_ngrams, normalize_text
+from evaltrim.normalize import char_ngrams, extract_amounts, normalize_text
 
 
 class PairScore(TypedDict):
@@ -91,11 +91,54 @@ def content_hash(*parts: str) -> str:
 
 
 def historical_overlap(left: RunStats | None, right: RunStats | None) -> float:
+    """Unknown history is treated as agreement (1.0), not a 0.5 penalty.
+
+    Missing run stats must not drag otherwise-identical paraphrases below MERGE.
+    """
     if left is None or right is None or left.runs <= 0 or right.runs <= 0:
-        return 0.5
+        return 1.0
     fr_l = left.failure_rate or 0.0
     fr_r = right.failure_rate or 0.0
     return 1.0 - abs(fr_l - fr_r)
+
+
+def _tf_vector(tokens: Sequence[str]) -> dict[str, float]:
+    counts = Counter(tokens)
+    total = max(sum(counts.values()), 1)
+    return {term: count / total for term, count in counts.items()}
+
+
+def _prefix_jaccard(left: Sequence[str], right: Sequence[str]) -> float:
+    """Jaccard that treats tokens sharing a 4-char stem as matches (duplicate/duplication)."""
+    a, b = list(left), list(right)
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
+    used_b = [False] * len(b)
+    matched = 0
+    for tok in a:
+        stem = tok[:4] if len(tok) >= 4 else tok
+        for i, other in enumerate(b):
+            if used_b[i]:
+                continue
+            other_stem = other[:4] if len(other) >= 4 else other
+            if tok == other or stem == other_stem:
+                used_b[i] = True
+                matched += 1
+                break
+    union = len(a) + len(b) - matched
+    return matched / union if union else 1.0
+
+
+def amount_agreement(left: str, right: str) -> float:
+    a, b = extract_amounts(left), extract_amounts(right)
+    if not a and not b:
+        return 0.5
+    if not a or not b:
+        return 0.0
+    sa, sb = {round(x, 2) for x in a}, {round(x, 2) for x in b}
+    return jaccard((str(x) for x in sa), (str(x) for x in sb))
 
 
 def behavior_overlap(left: Behavior, right: Behavior) -> tuple[float, list[str], list[str], list[str]]:
@@ -128,14 +171,36 @@ class SimilarityEngine:
         self._index = {t.id: i for i, t in enumerate(tests)}
 
     def _semantic(self, i: int, j: int) -> float:
+        left, right = self.tests[i].input, self.tests[j].input
+        n_left = tokenize_normalized(left)
+        n_right = tokenize_normalized(right)
+        norm_eq = normalize_text(left) == normalize_text(right) and bool(normalize_text(left))
+        jac = _prefix_jaccard(n_left, n_right)
+        tf_cos = cosine(_tf_vector(n_left), _tf_vector(n_right))
         word = self.word_index.pairwise(i, j)
         char = self.char_index.pairwise(i, j)
         raw = self.raw_index.pairwise(i, j)
-        lexical = 0.5 * word + 0.3 * char + 0.2 * raw
+        amounts = amount_agreement(left, right)
+        content_l = [t for t in n_left if len(t) >= 5 or t.startswith("amt_") or "_" in t]
+        content_r = [t for t in n_right if len(t) >= 5 or t.startswith("amt_") or "_" in t]
+        content = _prefix_jaccard(content_l, content_r) if (content_l or content_r) else jac
+        lexical = 0.30 * jac + 0.18 * tf_cos + 0.14 * char + 0.12 * word + 0.10 * raw + 0.16 * content
+        if amounts >= 0.99 and jac >= 0.45:
+            lexical = max(lexical, 0.88)
+        if jac >= 0.75:
+            lexical = max(lexical, 0.86)
+        if content >= 0.5 and jac >= 0.32:
+            lexical = max(lexical, 0.84)
+        rare_shared = [t for t in set(n_left) & set(n_right) if len(t) >= 8 or "_" in t]
+        if rare_shared and jac >= 0.28:
+            lexical = max(lexical, 0.86)
+        if norm_eq:
+            lexical = max(lexical, 0.97)
+        lexical = min(1.0, 0.82 * lexical + 0.18 * (amounts if amounts != 0.5 else lexical))
         if self.encoder is None:
             return lexical
-        encoded = float(self.encoder.similarity(self.tests[i].input, self.tests[j].input))  # type: ignore[attr-defined]
-        return 0.65 * lexical + 0.35 * encoded
+        encoded = float(self.encoder.similarity(left, right))  # type: ignore[attr-defined]
+        return min(1.0, 0.70 * lexical + 0.30 * encoded)
 
     def pair_score(self, left_id: str, right_id: str) -> PairScore:
         i, j = self._index[left_id], self._index[right_id]
@@ -145,6 +210,11 @@ class SimilarityEngine:
             pass
         semantic = self._semantic(i, j)
         expected = self.expected_index.pairwise(i, j)
+        exp_l, exp_r = self.tests[i].expected, self.tests[j].expected
+        if normalize_text(exp_l) == normalize_text(exp_r) and normalize_text(exp_l):
+            expected = max(expected, 0.99)
+        else:
+            expected = max(expected, _prefix_jaccard(tokenize_normalized(exp_l), tokenize_normalized(exp_r)))
         overlap, shared, uniq_l, uniq_r = behavior_overlap(self.behaviors[i], self.behaviors[j])
         hist = historical_overlap(self.tests[i].run_stats, self.tests[j].run_stats)
         score = (

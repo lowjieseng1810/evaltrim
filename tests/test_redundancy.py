@@ -58,7 +58,10 @@ def test_similar_wording_different_behavior_not_merged():
     )
     result = analyze_suite(suite)
     states = {r.test_id: r.state for r in result.recommendations}
-    assert states["limit"] == RecommendationState.KEEP
-    assert states["ambiguous"] == RecommendationState.KEEP
+    assert states["limit"] != RecommendationState.MERGE
+    assert states["ambiguous"] != RecommendationState.MERGE
+    assert states["limit"] != RecommendationState.RETIRE
+    assert states["ambiguous"] != RecommendationState.RETIRE
     for pair in result.pairs:
-        assert pair.recommendation == RecommendationState.KEEP
+        assert pair.recommendation != RecommendationState.MERGE
+        assert pair.recommendation != RecommendationState.RETIRE

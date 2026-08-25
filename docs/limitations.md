@@ -1,9 +1,12 @@
 # Limitations
 
-- Semantic similarity is local TF-IDF unless you add an embedding provider. Paraphrases can be missed or over-grouped.
-- Behavior extraction is unambiguous when tags are present and heuristic otherwise. Ambiguous natural language will produce incomplete signatures.
-- Oracle-conflict detection is a heuristic (similar inputs, dissimilar `expected`).
-- A reduced suite is not a proof that every unknown production failure will still be caught.
-- `RETIRE` / `MERGE` are review recommendations. Humans decide what to change in git.
-- Optional LLM assistance can add non-determinism and privacy risk; leave it off for reproducible CI.
-- Coverage is defined over **observed and declared atoms in the suite**, not over an unknown complete behavior space of the agent.
+- Semantic similarity is a local heuristic. Optional hashing embeddings are not a neural model. Some paraphrases are missed on purpose to protect hard negatives.
+- Unique-witness and coverage math is over **declared/observed atoms in the suite**, not the unknown behavior space of the agent.
+- Drift `LIKELY_SOURCE` is not causal attribution.
+- Impacted-test selection is not a complete dependency graph.
+- Suite health is a labeled heuristic, not a certification.
+- Portfolio selection is greedy.
+- Watch uses mtime polling; it is not an OS-specific recursive inotify daemon.
+- `llm_judge` grader still skips unless you add a provider.
+- EvalTrim never deletes or rewrites suite files.
+- v0.5+ items (IDE, MCP, self-healing, hosted SaaS) are not implemented.

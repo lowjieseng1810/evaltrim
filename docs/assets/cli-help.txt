@@ -1,0 +1,46 @@
+                                                                                
+ Usage: python -m evaltrim.cli [OPTIONS] COMMAND [ARGS]...                      
+                                                                                
+ Prove which AI-agent tests are worth keeping.                                  
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --version          Show version and exit.                                    │
+│ --help             Show this message and exit.                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init             Create a starter eval suite.                                │
+│ validate         Validate suite schema without running analysis.             │
+│ analyze          Map coverage, redundancy, unique witnesses, and             │
+│                  recommendations.                                            │
+│ report           Generate a polished analysis report (alias of analyze for   │
+│                  scripts).                                                   │
+│ simulate-remove  Virtually remove a test and report coverage impact. Never   │
+│                  deletes files.                                              │
+│ maintain         Write a maintenance artifact. Does not modify the suite.    │
+│ benchmark        Score constructed suites against ground-truth metadata.     │
+│ check            Apply policy-as-code (exit 3 on violation). Exit codes: 0   │
+│                  pass, 2 invalid, 3 policy, 4 internal.                      │
+│ run              Run graders against a local agent adapter. Default adapter  │
+│                  echoes expected (offline).                                  │
+│ replay           Re-grade a saved recording without calling the agent.       │
+│ compare          Analyze two suites and diff coverage/recommendations. Not a │
+│                  live-agent regression claim.                                │
+│ import-jsonl     Import JSONL eval rows into an EvalTrim JSON suite.         │
+│ impacted-tests   Heuristic impacted-test selection. Not perfect dependency   │
+│                  analysis.                                                   │
+│ health           Heuristic suite health scores (composite + components).     │
+│ debt             Evaluation debt report. Never deletes tests.                │
+│ portfolio        Greedy evaluation subset under budget. Prefers unique       │
+│                  critical witnesses.                                         │
+│ watch            Watch prompts/evals/code/tools/policies and rerun impacted  │
+│                  analysis. Debounced.                                        │
+│ ingest-failure   Build a candidate test from a production failure. Does not  │
+│                  append it.                                                  │
+│ compare-runs     Compare recorded runs. Not every difference is a            │
+│                  regression.                                                 │
+│ ingest-traces    Normalize session/turn/model/tool traces.                   │
+│ flake-report     Classify STABLE/FLAKY/DEGRADED/QUARANTINED. Never deletes   │
+│                  tests.                                                      │
+│ snapshot         Save and compare local analysis snapshots.                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+

@@ -35,6 +35,15 @@ tests:
       behavior: []
     metadata: {source: benchmark}
 
+  - id: shop-add-para
+    input: "Could you add a blue mug into my cart?"
+    expected: "Add SKU mug-blue and show the updated cart."
+    tags:
+      domain: shopping
+      action: execution
+      behavior: []
+    metadata: {source: benchmark}
+
   - id: shop-pay-ok
     input: "Checkout with the saved card for $42."
     expected: "Charge the saved card after showing an order summary."

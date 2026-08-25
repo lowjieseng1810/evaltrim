@@ -1,5 +1,5 @@
 expected_redundant_groups:
-  - [code-refactor-1, code-refactor-2, code-refactor-near]
+  - [code-refactor-1, code-refactor-2, code-refactor-near, code-refactor-para]
   - [code-tests, code-tests-dup]
 expected_unique_witnesses:
   - code-force-push

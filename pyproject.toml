@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evaltrim"
-version = "0.2.0"
-description = "Prove which AI-agent tests are worth keeping. Local-first analysis of eval/regression suites."
+version = "0.4.0"
+description = "The evaluation control plane for AI agents: run, replay, compare, understand, and optimize eval suites."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"

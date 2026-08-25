@@ -84,15 +84,25 @@ def render_markdown(result: AnalysisResult) -> str:
         for row in result.requirement_coverage:
             if row.uncovered:
                 warn = "  WARNING: uncovered critical requirement" if row.critical else "  WARNING: uncovered"
-                lines.append(f"`{row.requirement_id}` covered by: 0 tests{warn}")
+                lines.append(f"`{row.requirement_id}` {row.status} covered by: 0 tests{warn}")
             else:
-                lines.append(f"`{row.requirement_id}` covered by: {len(row.covered_by)} tests")
+                lines.append(f"`{row.requirement_id}` {row.status} covered by: {len(row.covered_by)} tests")
     lines += ["", "## Recommendations", ""]
     for rec in result.recommendations:
         lines.append(f"### `{rec.test_id}` — {rec.state.value}")
         lines.append(f"Value score (heuristic): {rec.value_score:.1f}/100 · confidence {rec.confidence:.2f}")
         for reason in rec.reasons:
             lines.append(f"- {reason}")
+        if rec.evidence:
+            evd = rec.evidence
+            lines.append(
+                f"- Evidence: semantic_similarity={evd.semantic_similarity} "
+                f"behavior_overlap={evd.behavior_overlap} unique_witnesses_lost={evd.unique_witnesses_lost} "
+                f"critical_coverage_lost={evd.critical_coverage_lost} "
+                f"requirement_coverage_lost={evd.requirement_coverage_lost} "
+                f"historical_failure_contribution={evd.historical_failure_contribution} "
+                f"counterfactual_coverage_loss={evd.counterfactual_coverage_loss}"
+            )
         lines.append("")
     lines += [
         "## Redundant Pairs",
@@ -112,7 +122,12 @@ def render_markdown(result: AnalysisResult) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_github_comment(result: AnalysisResult, *, report_path: str = "evaltrim-report.md") -> str:
+def render_github_comment(
+    result: AnalysisResult,
+    *,
+    report_path: str = "evaltrim-report.md",
+    extra: dict | None = None,
+) -> str:
     s = result.summary
     c = result.coverage
     unique_n = sum(1 for w in result.witnesses if w.unique_atoms)
@@ -121,24 +136,56 @@ def render_github_comment(result: AnalysisResult, *, report_path: str = "evaltri
     lines = [
         "## EvalTrim",
         "",
-        f"{s.test_count} tests analyzed",
-        f"Potentially redundant: {redundant_n}",
-        f"Unique witnesses: {unique_n}",
-        f"Retirement candidates: {s.retire}",
-        "",
-        "Critical behavior coverage:",
-        f"{crit} -> {crit}",
-        "",
-        "Estimated CI cost reduction:",
-        f"{s.estimated_ci_reduction * 100:.0f}%",
+        f"{s.test_count} tests · KEEP {s.keep} · MERGE {s.merge} · RETIRE {s.retire} · REVIEW {s.review}",
+        f"Potentially redundant: {redundant_n} · Unique witnesses: {unique_n}",
+        f"Critical coverage: {crit} · Review-queue reduction: {s.estimated_ci_reduction * 100:.0f}%",
         "",
     ]
     if c.uncovered_critical:
         lines.append("Critical coverage gaps: " + ", ".join(c.uncovered_critical))
     else:
-        lines.append("No critical coverage loss detected.")
-    lines += ["", f"View full report: `{report_path}`", ""]
+        lines.append("No declared critical coverage gaps.")
+    if result.conflicts:
+        lines.append(f"Oracle conflicts requiring REVIEW: {len(result.conflicts)}")
+    if extra:
+        if extra.get("impacted"):
+            lines.append("Impacted tests: " + ", ".join(extra["impacted"][:12]))
+        if extra.get("regression"):
+            lines.append("Regression summary: " + str(extra["regression"]))
+    lines += [
+        "",
+        "EvalTrim never deletes tests. Full detail is in the workflow artifacts.",
+        f"Report: `{report_path}`",
+        "",
+    ]
     return "\n".join(lines)
+
+
+def render_html(result: AnalysisResult) -> str:
+    s = result.summary
+    c = result.coverage
+    rows = "".join(
+        f"<tr><td>{e.test_id}</td><td>{e.recommendation.state.value}</td>"
+        f"<td>{e.value_score:.1f}</td><td>{', '.join(e.unique_atoms[:4]) or '—'}</td></tr>"
+        for e in result.evidence
+    )
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>EvalTrim report</title>
+<style>
+body {{ font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem; color: #111; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }}
+.muted {{ color: #555; }}
+</style></head><body>
+<h1>EvalTrim</h1>
+<p class="muted">Heuristic local report. Not a hosted dashboard.</p>
+<p>{s.test_count} tests · KEEP {s.keep} · MERGE {s.merge} · RETIRE {s.retire} · REVIEW {s.review}</p>
+<p>Critical coverage {c.critical_coverage * 100:.1f}% · Behavior coverage {c.behavior_coverage * 100:.1f}%</p>
+<table><thead><tr><th>Test</th><th>Recommendation</th><th>Value</th><th>Unique atoms</th></tr></thead>
+<tbody>{rows}</tbody></table>
+<p class="muted">{result.methodology}</p>
+</body></html>
+"""
 
 
 def render_simulation_markdown(sim: RemovalSimulation) -> str:
@@ -208,6 +255,13 @@ def render_maintenance_markdown(report: MaintenanceReport) -> str:
     lines += ["", "## Unique witnesses", ""]
     for w in report.unique_witnesses[:40]:
         lines.append(f"- `{w.test_id}`: {w.summary}")
+    lines += ["", "## Actions (do not modify suites automatically)", ""]
+    for action in report.actions[:80]:
+        lines.append(f"- `{action.get('test_id')}` → **{action.get('action')}**")
+    if report.add_candidates:
+        lines += ["", "## ADD_CANDIDATE (not active)", ""]
+        for cand in report.add_candidates[:20]:
+            lines.append(f"- `{cand.get('kind')}`: {cand.get('suggestion')}")
     lines += ["", "## Evidence notes", ""]
     for note in report.notes:
         lines.append(f"- {note}")

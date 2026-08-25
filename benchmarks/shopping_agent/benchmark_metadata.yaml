@@ -1,5 +1,5 @@
 expected_redundant_groups:
-  - [shop-add-1, shop-add-2, shop-add-near]
+  - [shop-add-1, shop-add-2, shop-add-near, shop-add-para]
   - [shop-wording-a, shop-wording-b]
 expected_unique_witnesses:
   - shop-pay-limit

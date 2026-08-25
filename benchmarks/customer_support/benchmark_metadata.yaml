@@ -1,5 +1,5 @@
 expected_redundant_groups:
-  - [cs-refund-hi-1, cs-refund-hi-2, cs-refund-hi-near]
+  - [cs-refund-hi-1, cs-refund-hi-2, cs-refund-hi-near, cs-refund-para]
   - [cs-refund-low, cs-refund-low-dup]
   - [cs-wording-a, cs-wording-b]
 expected_unique_witnesses:

@@ -12,6 +12,10 @@ on:
         description: Fail the job on policy violations
         required: false
         default: "false"
+      baseline:
+        description: Optional baseline suite path for compare
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -23,6 +27,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,28 +38,55 @@ jobs:
       - name: Install EvalTrim
         run: pip install .
 
-      - name: Analyze suite
+      - name: Analyze, policy, impacted tests, regression
         env:
           SUITE: ${{ github.event.inputs.suite || 'examples/demo_suite.yaml' }}
           STRICT: ${{ github.event.inputs.strict || 'false' }}
+          BASELINE: ${{ github.event.inputs.baseline || '' }}
         run: |
           mkdir -p artifacts
-          ARGS=(analyze "$SUITE" --format markdown --output artifacts/evaltrim-report.md)
-          if [ "$STRICT" = "true" ]; then
-            ARGS+=(--strict)
-          fi
-          # Never fail the build by default. Strict mode is opt-in.
           set +e
-          evaltrim "${ARGS[@]}"
+          evaltrim analyze "$SUITE" --format markdown --output artifacts/evaltrim-report.md
           status=$?
-          set -e
-          evaltrim analyze "$SUITE" --format github --output artifacts/evaltrim-pr.md
           evaltrim analyze "$SUITE" --format json --output artifacts/evaltrim-report.json
+          evaltrim analyze "$SUITE" --format html --output artifacts/evaltrim-report.html
+          evaltrim health "$SUITE" --format json > artifacts/evaltrim-health.json
+          evaltrim debt "$SUITE" --format json > artifacts/evaltrim-debt.json
+          evaltrim maintain "$SUITE" --format json --output artifacts/evaltrim-maintenance.json
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref || 'main' }}...HEAD 2>/dev/null | tr '\n' ' ')
+          if [ -n "$CHANGED" ]; then
+            evaltrim impacted-tests "$SUITE" $CHANGED --format json > artifacts/evaltrim-impacted.json || true
+          fi
+          if [ -n "$BASELINE" ] && [ -f "$BASELINE" ]; then
+            evaltrim compare "$BASELINE" "$SUITE" --format json > artifacts/evaltrim-regression.json || true
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          from evaltrim.parser import load_suite
+          from evaltrim.analyze import analyze_suite
+          from evaltrim.reports import render_github_comment
+          import json, os
+          suite = os.environ["SUITE"]
+          result = analyze_suite(load_suite(suite))
+          extra = {}
+          impacted = Path("artifacts/evaltrim-impacted.json")
+          if impacted.exists():
+              data = json.loads(impacted.read_text())
+              extra["impacted"] = [r["test_id"] for r in data.get("tests", []) if r.get("priority") in {"DIRECT", "CRITICAL"}][:12]
+          reg = Path("artifacts/evaltrim-regression.json")
+          if reg.exists():
+              extra["regression"] = json.loads(reg.read_text()).get("suite_diff_risk")
+          Path("artifacts/evaltrim-pr.md").write_text(render_github_comment(result, extra=extra), encoding="utf-8")
+          PY
+          if [ "$STRICT" = "true" ]; then
+            evaltrim check "$SUITE"
+            status=$?
+          fi
           if [ "$STRICT" = "true" ] && [ "$status" -ne 0 ]; then
             exit "$status"
           fi
 
-      - name: Upload report
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: evaltrim-report

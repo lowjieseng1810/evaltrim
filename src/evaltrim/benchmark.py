@@ -33,15 +33,20 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
     redundant_pred = _predicted_redundant_groups(result, suite)
     expected_groups = [set(g) for g in meta.get("expected_redundant_groups", [])]
     precision, recall = _set_prf(redundant_pred, expected_groups)
-
-    expected_unique = set(meta.get("expected_unique_witnesses", []))
-    pred_unique = {w.test_id for w in result.witnesses if w.unique_atoms}
-    unique_precision, unique_recall = _binary_prf(pred_unique, expected_unique)
-
+    f1 = None
+    fpr = None
+    if precision is not None and recall is not None:
+        f1 = round(2 * precision * recall / (precision + recall), 4) if (precision + recall) else 0.0
+        fpr = round(1.0 - precision, 4)
     expected_critical = set(meta.get("expected_critical_cases", []))
     retire_ids = {r.test_id for r in result.recommendations if r.state == RecommendationState.RETIRE}
     unsafe_retire = sorted(retire_ids & expected_critical)
     retirement_safety = 1.0 if not unsafe_retire else 0.0
+    false_retirement_rate = round(len(unsafe_retire) / max(len(retire_ids), 1), 4) if retire_ids else 0.0
+
+    expected_unique = set(meta.get("expected_unique_witnesses", []))
+    pred_unique = {w.test_id for w in result.witnesses if w.unique_atoms}
+    unique_precision, unique_recall = _binary_prf(pred_unique, expected_unique)
 
     reduction = result.summary.estimated_ci_reduction
     return {
@@ -51,6 +56,9 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
         "deterministic": deterministic,
         "redundancy_precision": precision,
         "redundancy_recall": recall,
+        "redundancy_f1": f1,
+        "false_positive_rate": fpr,
+        "false_retirement_rate": false_retirement_rate,
         "unique_witness_precision": unique_precision,
         "unique_witness_recall": unique_recall,
         "retirement_safety_rate": retirement_safety,
@@ -98,9 +106,8 @@ def _predicted_redundant_groups(result, suite: TestSuite) -> list[set[str]]:
             parent[rb] = ra
 
     for pair in result.pairs:
-        if pair.recommendation in {RecommendationState.MERGE, RecommendationState.RETIRE} or pair.score >= 0.9:
-            if pair.recommendation != RecommendationState.KEEP:
-                union(pair.left_id, pair.right_id)
+        if pair.recommendation in {RecommendationState.MERGE, RecommendationState.RETIRE}:
+            union(pair.left_id, pair.right_id)
     groups: dict[str, set[str]] = {}
     for tid in parent:
         groups.setdefault(find(tid), set()).add(tid)

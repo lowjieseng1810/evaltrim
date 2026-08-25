@@ -1,15 +1,16 @@
 # Roadmap
 
-## Done in this tree
+## Shipped
 
-- **v0.1** — suite intelligence: analyze, unique witnesses, removal simulation, reports, GitHub Action, constructed benchmarks.
-- **v0.2 Phase A** — canonical manifest, local runner + graders, snapshot/replay, suite compare, JSONL import, policy-as-code, optional hashing embeddings, candidate blocking for large suites.
+- **v0.1** — suite intelligence CLI
+- **v0.2** — local run/grade, snapshots, policy, embeddings opt-in, blocking
+- **v0.3** — traces, run regression classes, drift likely-source, watch, impacted tests, flake history, production-failure candidates
+- **v0.4** — behavior graph, compression, health/debt, oracle/requirements, conflict graph, boundary candidates, portfolio, evidence ledger
 
-## Next (not in this turn)
+## Deferred (do not treat as shipped)
 
-- **v0.3 Phase B** — normalized traces, watch/impacted-tests, flaky history, production-failure import, model-drift classification with evidence.
-- **v0.4 Phase C** — behavior graph UI-less API, suite health score, evaluation debt ledger, portfolio optimizer, evidence ledger as a first-class store.
-- **v0.5 Phase D** — scenarios, sandbox adapters, IDE/json status commands, optional MCP.
-- **v1.0 Phase E** — mutation testing, invariant mining, candidate repair PRs (still human-gated).
-
-Do not treat later-phase folder names as shipped features.
+- v0.5 IDE / full MCP
+- self-healing, automatic code repair
+- canary / rollback
+- hosted tracing or SaaS dashboard
+- giant sandbox framework

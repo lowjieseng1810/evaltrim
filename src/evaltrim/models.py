@@ -14,12 +14,45 @@ class RecommendationState(str, Enum):
     MERGE = "MERGE"
     RETIRE = "RETIRE"
     REVIEW = "REVIEW"
+    ADD_CANDIDATE = "ADD_CANDIDATE"
 
 
 class Verdict(str, Enum):
     SAFE_TO_RETIRE = "SAFE_TO_RETIRE"
     KEEP = "KEEP"
     REVIEW = "REVIEW"
+    UNCERTAIN = "UNCERTAIN"
+
+
+class FlakeStatus(str, Enum):
+    STABLE = "STABLE"
+    FLAKY = "FLAKY"
+    DEGRADED = "DEGRADED"
+    QUARANTINED = "QUARANTINED"
+
+
+class RegressionClass(str, Enum):
+    EXPECTED_CHANGE = "EXPECTED_CHANGE"
+    POSSIBLE_REGRESSION = "POSSIBLE_REGRESSION"
+    CONFIRMED_REGRESSION = "CONFIRMED_REGRESSION"
+    UNCERTAIN = "UNCERTAIN"
+
+
+class DriftSource(str, Enum):
+    CODE_CHANGE = "code_change"
+    PROMPT_CHANGE = "prompt_change"
+    CONFIGURATION_CHANGE = "configuration_change"
+    TOOL_SCHEMA_CHANGE = "tool_schema_change"
+    MODEL_PROVIDER_CHANGE = "model_provider_change"
+    TEST_ORACLE_CHANGE = "test_oracle_change"
+    UNCERTAIN = "uncertain"
+
+
+class ImpactPriority(str, Enum):
+    DIRECT = "DIRECT"
+    ADJACENT = "ADJACENT"
+    CRITICAL = "CRITICAL"
+    LOW_PRIORITY = "LOW_PRIORITY"
 
 
 class OracleStatus(str, Enum):
@@ -60,6 +93,7 @@ class RunStats(BaseModel):
     last_run: datetime | None = None
     average_latency_ms: float | None = None
     estimated_cost_usd: float | None = None
+    outcomes: list[str] = Field(default_factory=list)
 
     @property
     def failure_rate(self) -> float | None:
@@ -131,6 +165,10 @@ class TestCase(BaseModel):
     run_stats: RunStats | None = None
     behavior: Behavior | None = None
     requirement_ids: list[str] = Field(default_factory=list)
+    provenance_files: list[str] = Field(default_factory=list)
+    tool_dependencies: list[str] = Field(default_factory=list)
+    failure_family: str | None = None
+    quarantined: bool = False
 
     @field_validator("id")
     @classmethod
@@ -296,6 +334,27 @@ class WitnessRecord(BaseModel):
     boundary_marks: list[str] = Field(default_factory=list)
     unique_combo: bool = False
     unique_failure: bool = False
+    unique_requirement: list[str] = Field(default_factory=list)
+    unique_failure_family: bool = False
+    unique_boundary: bool = False
+
+
+class EvidenceLedger(BaseModel):
+    """Serializable explanation for a recommendation. Not a causal proof."""
+
+    decision: str
+    semantic_similarity: float | None = None
+    behavior_overlap: float | None = None
+    unique_witnesses_lost: int = 0
+    critical_coverage_lost: float = 0.0
+    requirement_coverage_lost: int = 0
+    historical_failure_contribution: float = 0.0
+    counterfactual_coverage_loss: float = 0.0
+    oracle_status: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
 
 
 class Recommendation(BaseModel):
@@ -305,6 +364,7 @@ class Recommendation(BaseModel):
     value_score: float
     confidence: float
     pair_ids: list[str] = Field(default_factory=list)
+    evidence: EvidenceLedger | None = None
 
 
 class TestEvidence(BaseModel):
@@ -335,8 +395,12 @@ class RemovalSimulation(BaseModel):
     unique_witnesses_after: int = 0
     critical_by_name_before: dict[str, bool] = Field(default_factory=dict)
     critical_by_name_after: dict[str, bool] = Field(default_factory=dict)
+    lost_requirement_ids: list[str] = Field(default_factory=list)
+    historical_failure_contribution: float = 0.0
+    counterfactual_coverage_loss: float = 0.0
     verdict: Verdict
     reasons: list[str]
+    evidence: dict[str, Any] = Field(default_factory=dict)
 
 
 class OracleConflict(BaseModel):
@@ -359,6 +423,7 @@ class RequirementCoverage(BaseModel):
     critical: bool = False
     covered_by: list[str] = Field(default_factory=list)
     uncovered: bool = False
+    status: str = "uncovered"
 
 
 class AnalysisResult(BaseModel):
@@ -377,6 +442,10 @@ class AnalysisResult(BaseModel):
     candidate_pairs_considered: int = 0
     embeddings_used: bool = False
     llm_used: bool = False
+    behavior_graph: dict[str, Any] = Field(default_factory=dict)
+    compression: dict[str, Any] = Field(default_factory=dict)
+    evaluator_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    missing_boundaries: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class MaintenanceReport(BaseModel):
@@ -392,3 +461,5 @@ class MaintenanceReport(BaseModel):
     evidence: list[TestEvidence]
     notes: list[str] = Field(default_factory=list)
     requirement_coverage: list[RequirementCoverage] = Field(default_factory=list)
+    add_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    actions: list[dict[str, Any]] = Field(default_factory=list)

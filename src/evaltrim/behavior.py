@@ -9,7 +9,7 @@ from evaltrim.llm.base import BehaviorExtractor
 from evaltrim.models import Behavior, TestCase
 
 DOMAIN_KEYWORDS: Mapping[str, tuple[str, ...]] = {
-    "refund": ("refund", "reimburse", "chargeback"),
+    "refund": ("refund", "reimburse", "chargeback", "return"),
     "payment": ("payment", "charge", "checkout", "invoice", "card"),
     "privacy": ("privacy", "gdpr", "delete my data", "pii", "personal data"),
     "authentication": ("login", "password", "auth", "2fa", "mfa", "sso"),
@@ -39,6 +39,7 @@ CONDITION_KEYWORDS: Mapping[str, tuple[str, ...]] = {
     "destructive": ("delete", "destroy", "irreversible"),
     "pii_present": ("ssn", "social security", "email", "phone number"),
     "unauthenticated": ("logged out", "anonymous", "without login"),
+    "store_credit_already_issued": ("store credit", "already received store credit", "already issued"),
     "policy_boundary": ("policy limit", "exactly at"),
 }
 

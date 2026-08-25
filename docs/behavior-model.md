@@ -39,4 +39,4 @@ critical_behaviors:
   - policy_violation
 ```
 
-If a test is the only remaining witness for a declared name (or for a `critical: true` atom), EvalTrim will not recommend `RETIRE`. The recommendation is `KEEP`, or `REVIEW` when the oracle itself is conflicting and confidence is low — never silent deletion.
+If a test is the only remaining witness for a declared name, a unique requirement, a unique failure family, or a boundary mark, EvalTrim will not recommend `RETIRE`. Unique critical witnesses cannot become RETIRE automatically.

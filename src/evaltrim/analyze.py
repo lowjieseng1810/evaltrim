@@ -12,6 +12,11 @@ from evaltrim.candidates import CandidatePairGenerator
 from evaltrim.coverage import compute_coverage, covers_declared, unique_atoms_by_test
 from evaltrim.embeddings import load_encoder
 from evaltrim.errors import TestNotFoundError
+from evaltrim.intelligence.boundaries import missing_boundary_candidates
+from evaltrim.intelligence.compression import compression_stats
+from evaltrim.intelligence.conflicts import evaluator_conflict_graph
+from evaltrim.intelligence.evidence import ledger_for
+from evaltrim.intelligence.graph import behavior_graph
 from evaltrim.lifecycle import infer_lifecycle, stale_status
 from evaltrim.llm.base import BehaviorExtractor
 from evaltrim.models import (
@@ -36,12 +41,14 @@ from evaltrim.simulate import simulate_removal
 
 METHODOLOGY = (
     "Scores are heuristics, not statistical guarantees. Semantic similarity combines "
-    "normalized-token TF-IDF, character n-grams, and raw TF-IDF. Optional hashing embeddings "
-    "or an LLM comparator may be enabled explicitly. Redundancy also uses Jaccard overlap of "
-    "behavior atoms, expected-oracle similarity, and historical failure-rate closeness. "
-    "Candidate generation uses full pairwise comparison below config.full_pairwise_limit and "
-    "blocking (exact hash, behavior signature, inverted-index neighbors) above it. Unique "
-    "witnesses include singleton atoms, unique condition combinations, and boundary marks. "
+    "normalized-token overlap, character n-grams, corpus-free TF cosine, and collection TF-IDF. "
+    "Optional hashing embeddings or an LLM comparator may be enabled explicitly. "
+    "Embeddings and semantic retrieval may CREATE CANDIDATES; they never independently authorize RETIRE. "
+    "Redundancy also uses Jaccard overlap of behavior atoms, expected-oracle similarity, and historical "
+    "failure-rate closeness. Candidate generation uses full pairwise comparison below "
+    "config.full_pairwise_limit and layered blocking (exact hash, lexical prefix, behavior, inverted-index, "
+    "optional embeddings) above it. Unique witnesses include singleton atoms, condition combinations, "
+    "boundaries, unique requirements, and unique failure families. "
     "Removal is simulated in memory and never deletes files. KEEP always wins over RETIRE when "
     "a test is the only witness for a critical behavior. A high semantic score alone never retires."
 )
@@ -77,13 +84,15 @@ def analyze_suite(
     boundary_unique = unique_boundary_ids(tests, marks_by_id)
     combo_unique = _unique_combos(tests, behaviors)
     failure_unique = _unique_failures(tests)
+    family_unique = _unique_failure_families(tests)
+    req_unique = _unique_requirements(suite)
 
     t_cand = perf_counter()
     generator = CandidatePairGenerator(
         full_pairwise_limit=cfg.full_pairwise_limit,
         neighbor_k=cfg.candidate_neighbor_k,
     )
-    index_pairs = generator.pairs(tests, behaviors)
+    index_pairs = generator.pairs(tests, behaviors, encoder=encoder)
     candidate_s = perf_counter() - t_cand
 
     pairs: list[RedundantPair] = []
@@ -151,6 +160,16 @@ def analyze_suite(
     max_cost = max(((t.run_stats.estimated_cost_usd or 0.0) if t.run_stats else 0.0) for t in tests) or 1.0
 
     t_rem = perf_counter()
+    merge_ids = {p.left_id for p in pairs if p.recommendation == RecommendationState.MERGE} | {
+        p.right_id for p in pairs if p.recommendation == RecommendationState.MERGE
+    }
+    max_pair_sem: dict[str, float] = {t.id: 0.0 for t in tests}
+    max_pair_ov: dict[str, float] = {t.id: 0.0 for t in tests}
+    for pair in pairs:
+        max_pair_sem[pair.left_id] = max(max_pair_sem[pair.left_id], pair.semantic)
+        max_pair_sem[pair.right_id] = max(max_pair_sem[pair.right_id], pair.semantic)
+        max_pair_ov[pair.left_id] = max(max_pair_ov[pair.left_id], pair.behavior_overlap)
+        max_pair_ov[pair.right_id] = max(max_pair_ov[pair.right_id], pair.behavior_overlap)
     evidence: list[TestEvidence] = []
     recommendations = []
     witnesses: list[WitnessRecord] = []
@@ -163,9 +182,12 @@ def analyze_suite(
             baseline=coverage,
             policies=policies,
             unique=unique,
+            suite=suite,
         )
         uniq = unique.get(test.id, [])
         uniq_crit = _unique_critical(test.id, behavior, tests, behaviors, declared, uniq)
+        if test.id in req_unique:
+            uniq_crit = sorted(set(uniq_crit) | {f"requirement:{r}" for r in req_unique[test.id]})
         score = value_score(
             test,
             behavior,
@@ -189,11 +211,23 @@ def analyze_suite(
             value_score=score,
             boundary_unique=test.id in boundary_unique,
             unique_combo=test.id in combo_unique,
+            unique_failure=test.id in failure_unique,
+            unique_failure_family=test.id in family_unique,
+            unique_requirement=req_unique.get(test.id, []),
             oracle_status=(health_by_id[test.id].status if test.id in health_by_id else OracleStatus.TRUSTED),
             lifecycle=life,
             policies=policies,
+            merge_candidate=test.id in merge_ids,
         )
         rec.pair_ids = partners.get(test.id, [])
+        rec.evidence = ledger_for(
+            rec,
+            test=test,
+            simulation=sim,
+            semantic=max_pair_sem[test.id],
+            overlap=max_pair_ov[test.id],
+            oracle_status=(health_by_id[test.id].status if test.id in health_by_id else None),
+        )
         recommendations.append(rec)
         evidence.append(
             TestEvidence(
@@ -233,6 +267,9 @@ def analyze_suite(
                 boundary_marks=marks_by_id.get(test.id, []),
                 unique_combo=test.id in combo_unique,
                 unique_failure=test.id in failure_unique,
+                unique_requirement=req_unique.get(test.id, []),
+                unique_failure_family=test.id in family_unique,
+                unique_boundary=test.id in boundary_unique,
             )
         )
     removal_s = perf_counter() - t_rem
@@ -254,7 +291,7 @@ def analyze_suite(
         estimated=estimated,
     )
     total = perf_counter() - t0
-    return AnalysisResult(
+    analysis = AnalysisResult(
         summary=summary,
         coverage=coverage,
         evidence=evidence,
@@ -277,6 +314,11 @@ def analyze_suite(
         embeddings_used=encoder is not None,
         llm_used=extractor is not None or cfg.llm_enabled,
     )
+    analysis.evaluator_conflicts = evaluator_conflict_graph(analysis)
+    analysis.missing_boundaries = missing_boundary_candidates(suite)
+    analysis.behavior_graph = behavior_graph(suite, analysis)
+    analysis.compression = compression_stats(analysis)
+    return analysis
 
 
 def suite_summary_from(
@@ -309,6 +351,16 @@ def build_maintenance(result: AnalysisResult) -> MaintenanceReport:
         "EvalTrim never deletes or rewrites suite files.",
         "Treat RETIRE and MERGE as review queues, not automatic actions.",
         "Stale unique critical witnesses stay KEEP.",
+        "ADD_CANDIDATE items are suggestions only.",
+    ]
+    actions = [
+        {
+            "test_id": r.test_id,
+            "action": r.state.value,
+            "reasons": r.reasons,
+            "evidence": r.evidence.model_dump() if r.evidence else None,
+        }
+        for r in result.recommendations
     ]
     return MaintenanceReport(
         generated_at=datetime.now(UTC),
@@ -323,6 +375,8 @@ def build_maintenance(result: AnalysisResult) -> MaintenanceReport:
         evidence=result.evidence,
         notes=notes,
         requirement_coverage=result.requirement_coverage,
+        add_candidates=list(result.missing_boundaries),
+        actions=actions,
     )
 
 
@@ -330,13 +384,23 @@ def _requirement_coverage(suite: TestSuite) -> list[RequirementCoverage]:
     rows: list[RequirementCoverage] = []
     for req in suite.requirements:
         holders = [t.id for t in suite.tests if req.id in t.requirement_ids]
+        uncovered = len(holders) == 0
+        if uncovered and req.critical:
+            status = "critical_uncovered"
+        elif uncovered:
+            status = "uncovered"
+        elif req.critical and not any(suite.get(tid).tags.critical for tid in holders):
+            status = "partially_covered"
+        else:
+            status = "covered"
         rows.append(
             RequirementCoverage(
                 requirement_id=req.id,
                 description=req.description,
                 critical=req.critical,
                 covered_by=holders,
-                uncovered=len(holders) == 0,
+                uncovered=uncovered,
+                status=status,
             )
         )
     return rows
@@ -354,6 +418,23 @@ def _unique_combos(tests, behaviors) -> set[str]:
 def _unique_failures(tests) -> set[str]:
     failed = [t.id for t in tests if t.run_stats and t.run_stats.failures > 0]
     return set(failed) if len(failed) == 1 else set()
+
+
+def _unique_failure_families(tests) -> set[str]:
+    index: dict[str, list[str]] = defaultdict(list)
+    for test in tests:
+        if test.failure_family:
+            index[test.failure_family].append(test.id)
+    return {ids[0] for ids in index.values() if len(ids) == 1}
+
+
+def _unique_requirements(suite: TestSuite) -> dict[str, list[str]]:
+    mapping: dict[str, list[str]] = defaultdict(list)
+    for req in suite.requirements:
+        holders = [t.id for t in suite.tests if req.id in t.requirement_ids]
+        if len(holders) == 1:
+            mapping[holders[0]].append(req.id)
+    return dict(mapping)
 
 
 def _unique_critical(
@@ -403,12 +484,7 @@ def _decision(
     critical = left_critical or right_critical
     boundary = boundary_l or boundary_r
     reasons: list[str] = []
-    if conflict:
-        state = RecommendationState.REVIEW
-        reasons.append("Oracle conflict: similar inputs, dissimilar expected.")
-        confidence = 0.55
-        label = "ORACLE_CONFLICT"
-    elif boundary and (boundary_l != boundary_r or meaningful_l or meaningful_r):
+    if boundary and (boundary_l != boundary_r or meaningful_l or meaningful_r):
         state = RecommendationState.KEEP
         reasons.append("Boundary uniqueness: do not collapse threshold neighbors.")
         confidence = 0.95
@@ -418,10 +494,15 @@ def _decision(
         reasons.append("Unique behavior remains on at least one side.")
         confidence = 0.9
         label = "KEEP_BOTH"
-    elif score >= merge_threshold and overlap >= 0.99 and expected >= 0.8 and not unique:
+    elif conflict:
+        state = RecommendationState.REVIEW
+        reasons.append("Oracle conflict: similar inputs, dissimilar expected.")
+        confidence = 0.55
+        label = "ORACLE_CONFLICT"
+    elif overlap >= 0.99 and expected >= 0.8 and not unique and (score >= merge_threshold or semantic >= 0.80):
         state = RecommendationState.MERGE
         reasons.append("REDUNDANT_CANDIDATE: high overlap on semantics, behavior, and expected; no unique atom.")
-        confidence = min(0.93, 0.5 + 0.5 * score)
+        confidence = min(0.93, 0.5 + 0.5 * max(score, semantic))
         label = "REDUNDANT_CANDIDATE"
     elif semantic >= merge_threshold and overlap < 0.5:
         state = RecommendationState.KEEP
@@ -476,4 +557,5 @@ def simulate_suite(suite: TestSuite, test_id: str):
         test_id,
         declared_critical=declared,
         policies=suite.config.policies,
+        suite=suite,
     )
