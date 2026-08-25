@@ -165,20 +165,23 @@ class SimilarityEngine:
         self.encoder = encoder
         inputs = [t.input for t in tests]
         self.word_index = TfidfIndex(inputs, normalized=True)
-        self.char_index = TfidfIndex(inputs, char=True)
+        self.use_char = len(tests) <= 400
+        self.char_index = TfidfIndex(inputs, char=True) if self.use_char else None
         self.raw_index = TfidfIndex(inputs)
         self.expected_index = TfidfIndex([t.expected for t in tests], normalized=True)
         self._index = {t.id: i for i, t in enumerate(tests)}
+        self._norm_tokens = [tokenize_normalized(t.input) for t in tests]
+        self._tf_vecs = [_tf_vector(toks) for toks in self._norm_tokens]
 
     def _semantic(self, i: int, j: int) -> float:
         left, right = self.tests[i].input, self.tests[j].input
-        n_left = tokenize_normalized(left)
-        n_right = tokenize_normalized(right)
+        n_left = self._norm_tokens[i]
+        n_right = self._norm_tokens[j]
         norm_eq = normalize_text(left) == normalize_text(right) and bool(normalize_text(left))
         jac = _prefix_jaccard(n_left, n_right)
-        tf_cos = cosine(_tf_vector(n_left), _tf_vector(n_right))
+        tf_cos = cosine(self._tf_vecs[i], self._tf_vecs[j])
         word = self.word_index.pairwise(i, j)
-        char = self.char_index.pairwise(i, j)
+        char = self.char_index.pairwise(i, j) if self.char_index is not None else jac
         raw = self.raw_index.pairwise(i, j)
         amounts = amount_agreement(left, right)
         content_l = [t for t in n_left if len(t) >= 4 or t.startswith("amt_") or "_" in t]

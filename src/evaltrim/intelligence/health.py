@@ -35,6 +35,19 @@ def suite_health(suite: TestSuite, result: AnalysisResult) -> dict[str, Any]:
     oracle = round(trusted * 100, 1)
     conflicts = round(max(0.0, 100.0 - conflict_frac * 200), 1)
     provenance = round(provenanced * 100, 1)
+    costs = [t.run_stats.estimated_cost_usd for t in suite.tests if t.run_stats and t.run_stats.estimated_cost_usd]
+    if costs:
+        mean_cost = sum(costs) / len(costs)
+        cost_efficiency = round(max(0.0, 100.0 - min(100.0, mean_cost * 100)), 1)
+    else:
+        cost_efficiency = 100.0
+    human = []
+    for test in suite.tests:
+        acc = int(test.metadata.get("human_accepts") or 0)
+        rej = int(test.metadata.get("human_rejects") or 0)
+        if acc + rej:
+            human.append(acc / (acc + rej))
+    oracle_reliability = round((sum(human) / len(human) * 100) if human else oracle, 1)
     maintainability = round((tagged * 50 + (1 - stale_frac) * 25 + (1 - conflict_frac) * 25) * 100 / 100, 1)
 
     components = {
@@ -48,18 +61,22 @@ def suite_health(suite: TestSuite, result: AnalysisResult) -> dict[str, Any]:
         "conflicts": conflicts,
         "provenance": provenance,
         "maintainability": maintainability,
+        "cost_efficiency": cost_efficiency,
+        "oracle_reliability": oracle_reliability,
     }
     weights = {
         "coverage": 0.12,
         "critical_coverage": 0.18,
         "redundancy": 0.08,
-        "diversity": 0.10,
+        "diversity": 0.08,
         "freshness": 0.08,
         "flakiness": 0.08,
-        "oracle_health": 0.12,
-        "conflicts": 0.10,
-        "provenance": 0.07,
-        "maintainability": 0.07,
+        "oracle_health": 0.08,
+        "conflicts": 0.08,
+        "provenance": 0.05,
+        "maintainability": 0.05,
+        "cost_efficiency": 0.05,
+        "oracle_reliability": 0.07,
     }
     composite = round(sum(components[k] * weights[k] for k in components), 1)
     return {

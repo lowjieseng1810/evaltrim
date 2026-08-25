@@ -22,7 +22,7 @@ def evaluation_debt(suite: TestSuite, result: AnalysisResult) -> dict[str, Any]:
         status, _ = classify_flake(test)
         if status == FlakeStatus.QUARANTINED:
             quarantined.append(test.id)
-        elif status in {FlakeStatus.FLAKY, FlakeStatus.DEGRADED}:
+        elif status in {FlakeStatus.FLAKY, FlakeStatus.DEGRADED, FlakeStatus.ENVIRONMENTAL}:
             flaky.append(test.id)
     conflicts = list(result.conflicts)
     uncovered = [row.requirement_id for row in result.requirement_coverage if row.uncovered]

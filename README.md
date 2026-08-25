@@ -8,13 +8,13 @@ EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace 
 
 It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-Current version: **0.6.0** (beta public API — not 1.0).
+Current version: **0.7.0** (beta public API — not 1.0). Competitive status: **PARITY** — see [docs/competitive-results.md](docs/competitive-results.md). This is not a claim that EvalTrim beats every competitor on every metric.
 
 ## Three layers
 
-1. **Evaluation** — run graders against a local adapter, record, replay, experiment comparison.
-2. **Regression Control** — compare recorded runs and suite snapshots, classify likely drift sources, watch files, select impacted tests, pre-commit `gate`.
-3. **Evaluation Intelligence** — behavior graph, unique witnesses, counterfactual removal, suite health, evaluation debt, portfolio selection, explanations for coding agents.
+1. **Evaluation** — plugin graders (exact, contains, regex, JSON Schema, semantic, tools, trajectory, latency, TTFT, tokens, cost, custom), record, replay, multi-run statistics, experiment matrix / Pareto.
+2. **Regression Control** — recorded-run classes including `UNCHANGED`, drift attribution (heuristic), watch, impacted tests + safety sample, flakes including `ENVIRONMENTAL`, pre-commit `gate`.
+3. **Evaluation Intelligence** — behavior classes, unique witnesses, counterfactual removal, information gain, mutation score, suite health, evaluation debt, portfolio / Pareto, proof-carrying recommendations.
 
 EvalTrim does not only evaluate the agent. It evaluates and maintains the evaluation system itself.
 
@@ -62,7 +62,9 @@ The default merge bar is **not** lowered globally. Hard negatives that share voc
 
 Every important command accepts `--format json` with stable field names:
 
-`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `gate` · `doctor` · `experiment`
+`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `gate` · `doctor` · `experiment` · `experiment-matrix` · `redteam` · `mutate` · `cluster` · `competitive-benchmark`
+
+JSON objects include `contract_version` (`1.0`). Extra keys may appear.
 
 Exit codes: `0` ok · `2` invalid/missing input · `3` policy/strict · `4` internal.
 
@@ -102,10 +104,20 @@ Generated from this repo’s demo suite. Not mocked numbers.
 
 Open [docs/images/report.html](docs/images/report.html).
 
-## Measured quality (v0.6.0)
+## Measured quality (v0.7.0)
 
 Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
 No LLM. Embeddings off. Constructed suites — **not** production traffic.
+
+Re-measured after the 0.7 pass (same metadata, same merge bar). Numbers below are filled from the latest local run in [docs/benchmark.md](docs/benchmark.md).
+
+v0.6.0 on the same harness was already precision/recall/safety/critical coverage **1.0** on those three suites. The 0.7 bar is: keep those safety metrics while adding graders/stats and reducing scale runtime.
+
+## Competitive comparison
+
+See [docs/competitive-benchmark.md](docs/competitive-benchmark.md) and [docs/competitive-results.md](docs/competitive-results.md).
+
+Competitor columns that were not reproduced in-process are **UNMEASURED**. EvalTrim is **not** declared superior to EvalView snapshots, Promptfoo red-team catalogs, Vercel coding sandboxes, or hosted experiment UIs.
 
 | Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -119,18 +131,19 @@ v0.2.0 recall on smaller suites was coding 0.50 / customer_support 0.40 / shoppi
 
 ## Scale (synthetic suites, no quality labels)
 
-Cold run, `EVALTRIM_NO_CACHE=1`. v0.4.0 5,000-test runtime was **466.7s** (~315s in per-test removal). Indexed incremental coverage is the removal path in 0.6.
+Cold run, `EVALTRIM_NO_CACHE=1`. v0.6.0 5,000-test runtime was **249.3s** with 174k candidate pairs. v0.7 caps inverted-index document frequency and neighbor retrieval on large n.
 
-| n | runtime | peak MiB | candidate pairs | removal_seconds (this run) |
-| --- | --- | --- | --- | --- |
-| 100 | 2.84s | 7.8 | 4950 | 0.08 |
-| 500 | 13.79s | 77.0 | 21840 | 1.36 |
-| 1000 | 28.51s | 138.7 | 38881 | 4.26 |
-| 5000 | **249.3s** | 627.7 | 174694 | 87.6 |
+Latest measured numbers:
 
-After a further coverage-delta change (same safety tests), 1000-test `removal_seconds` stayed ~4s; 5k wall clock is limited by similarity (~98s) and blocking (~59s). **10,000 was not finished** (still running past 8 minutes on this agent; dominated by pair scoring, not a correctness issue).
+| n | runtime | peak MiB | pairs |
+| --- | --- | --- | --- |
+| 100 | 2.65s | 8.2 | 4950 |
+| 500 | 11.51s | 72 | 19856 |
+| 1000 | 19.44s | 101 | 27379 |
+| 5000 | **133.4s** (was 249.3s in 0.6.0) | 257 | 59840 |
+| 10000 | **436.8s** (not completed in 0.6.0) | 409 | 76205 |
 
-The remaining 5k cost is **similarity + blocking**, not full-suite removal rebuilds. Pair scores persist locally so a later run that changes only a few tests can reuse unchanged pairs (cache keys include algorithm version).
+Details: [docs/benchmark.md](docs/benchmark.md).
 
 ## Not guaranteed
 
@@ -153,7 +166,9 @@ Deferred on purpose: IDE plugins, full MCP platform, self-healing, automatic rep
 - [Semantic backends](docs/semantic.md)
 - [MCP adapter](docs/mcp.md)
 - [Removal simulation](docs/removal-simulation.md)
-- [Benchmarks](docs/benchmark.md)
+- [Competitive audit](docs/competitive-benchmark.md)
+- [Taxonomy A–AP](docs/taxonomy.md)
+- [Competitive results](docs/competitive-results.md)
 - [Limitations](docs/limitations.md)
 - [Changelog](CHANGELOG.md)
 - [Release audit](RELEASE_AUDIT.md)

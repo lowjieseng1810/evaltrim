@@ -8,5 +8,8 @@
 - Portfolio selection is greedy.
 - Watch uses mtime polling; it is not an OS-specific recursive inotify daemon.
 - `llm_judge` grader still skips unless you add a provider.
+- Local sandbox is not a VM/container.
+- Red-team probes are family-level fixtures, not a vendor attack catalog.
+- 10k synthetic analysis completes but is dominated by per-test removal simulation.
 - EvalTrim never deletes or rewrites suite files.
 - v0.5+ items (IDE, full MCP platform, self-healing, hosted SaaS) are not implemented. A tiny optional `mcp_adapter.dispatch` exists; it is not a server.

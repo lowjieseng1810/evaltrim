@@ -64,3 +64,44 @@ def evaluate_failure_candidate(suite: TestSuite, candidate: TestCase) -> dict[st
         "evidence": rec.evidence.model_dump(mode="json") if rec.evidence else None,
         "note": "EvalTrim never appends production failures automatically.",
     }
+
+
+def compress_production_failures(records: list[dict[str, Any]], suite: TestSuite | None = None) -> dict[str, Any]:
+    """Cluster failures into families, then unique witnesses. Never auto-inserts tests."""
+    from collections import defaultdict
+
+    from evaltrim.normalize import normalize_text
+
+    families: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for rec in records:
+        fam = rec.get("failure_family")
+        if not fam:
+            key = normalize_text(str(rec.get("input") or rec.get("error") or rec.get("id") or ""))
+            fam = key[:48] or "unknown"
+        families[str(fam)].append(rec)
+    unique_witnesses = []
+    for fam, members in families.items():
+        representative = members[0]
+        unique_witnesses.append(
+            {
+                "failure_family": fam,
+                "size": len(members),
+                "representative_id": representative.get("id"),
+            }
+        )
+    covered = 0
+    if suite is not None:
+        existing = {t.failure_family for t in suite.tests if t.failure_family}
+        covered = sum(1 for fam in families if fam in existing)
+    n = len(records)
+    n_fam = len(families)
+    n_wit = len(unique_witnesses)
+    return {
+        "production_failures": n,
+        "failure_families": n_fam,
+        "unique_regression_witnesses": n_wit,
+        "already_covered_families": covered,
+        "compression_ratio": round(n_wit / n, 6) if n else 1.0,
+        "families": unique_witnesses,
+        "note": "Compression is clustering, not automatic suite insertion.",
+    }

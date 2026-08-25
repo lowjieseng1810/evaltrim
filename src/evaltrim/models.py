@@ -28,10 +28,12 @@ class FlakeStatus(str, Enum):
     STABLE = "STABLE"
     FLAKY = "FLAKY"
     DEGRADED = "DEGRADED"
+    ENVIRONMENTAL = "ENVIRONMENTAL"
     QUARANTINED = "QUARANTINED"
 
 
 class RegressionClass(str, Enum):
+    UNCHANGED = "UNCHANGED"
     EXPECTED_CHANGE = "EXPECTED_CHANGE"
     POSSIBLE_REGRESSION = "POSSIBLE_REGRESSION"
     CONFIRMED_REGRESSION = "CONFIRMED_REGRESSION"
@@ -45,7 +47,22 @@ class DriftSource(str, Enum):
     TOOL_SCHEMA_CHANGE = "tool_schema_change"
     MODEL_PROVIDER_CHANGE = "model_provider_change"
     TEST_ORACLE_CHANGE = "test_oracle_change"
+    ENVIRONMENT_CHANGE = "environment_change"
     UNCERTAIN = "uncertain"
+
+
+class LikelySource(str, Enum):
+    """Heuristic attribution. Not causal proof."""
+
+    CODE = "CODE"
+    PROMPT = "PROMPT"
+    CONFIG = "CONFIG"
+    TOOL = "TOOL"
+    MODEL = "MODEL"
+    PROVIDER = "PROVIDER"
+    ORACLE = "ORACLE"
+    ENVIRONMENT = "ENVIRONMENT"
+    UNKNOWN = "UNKNOWN"
 
 
 class ImpactPriority(str, Enum):
@@ -384,6 +401,9 @@ class EvidenceLedger(BaseModel):
     counterfactual_status: str | None = None
     oracle_status: str | None = None
     notes: list[str] = Field(default_factory=list)
+    proof: list[dict[str, Any]] = Field(default_factory=list)
+    information_gain: float | None = None
+    failure_detection_value: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -478,6 +498,10 @@ class AnalysisResult(BaseModel):
     compression: dict[str, Any] = Field(default_factory=dict)
     evaluator_conflicts: list[dict[str, Any]] = Field(default_factory=list)
     missing_boundaries: list[dict[str, Any]] = Field(default_factory=list)
+    clusters: list[dict[str, Any]] = Field(default_factory=list)
+    information_gain: list[dict[str, Any]] = Field(default_factory=list)
+    failure_values: list[dict[str, Any]] = Field(default_factory=list)
+    contract_version: str = "1.0"
 
 
 class MaintenanceReport(BaseModel):

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-08-25
+
+Competitive parity pass: measure, close gaps, re-measure. No “beats every competitor” claim.
+
+- Plugin graders: not_contains, JSON Schema subset, tool_args, TTFT, tokens, custom `module:fn`, trajectory LCS/strict
+- Statistics: stdev, percentiles, bootstrap CI, Welch t-test, Cohen's d, statistical vs practical significance
+- Regression: `UNCHANGED`; provider/infrastructure errors are not `CONFIRMED_REGRESSION`
+- Flakes: `ENVIRONMENTAL` vs model/agent flake
+- Experiments: multi-run matrix, Pareto BEST_QUALITY / BEST_COST / BEST_LATENCY / BEST_PARETO_OPTION
+- Intelligence: behavior classes, information gain, failure-detection value, mutation score, proof graphs
+- Production failure compression (never auto-inserts)
+- Local red-team family probes; minimal local sandbox; multi-turn scenario replay
+- YAML/JSON/JSONL export; versioned JSON contract `1.0`
+- Scale: DF-capped blocking + cached token vectors (see benchmark.md for measured times)
+- Competitive audit + harness (`docs/competitive-benchmark.md`)
+
 ## 0.6.0 — 2026-08-25
 
 Agent-native workflow and release infrastructure.

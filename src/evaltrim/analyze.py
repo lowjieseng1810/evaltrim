@@ -16,10 +16,13 @@ from evaltrim.embeddings import load_encoder
 from evaltrim.errors import TestNotFoundError
 from evaltrim.incremental import PairScoreCache
 from evaltrim.intelligence.boundaries import missing_boundary_candidates
+from evaltrim.intelligence.clusters import cluster_behaviors
 from evaltrim.intelligence.compression import compression_stats
 from evaltrim.intelligence.conflicts import evaluator_conflict_graph
 from evaltrim.intelligence.evidence import ledger_for
+from evaltrim.intelligence.failure_value import failure_detection_value
 from evaltrim.intelligence.graph import behavior_graph
+from evaltrim.intelligence.infogain import information_gain as compute_information_gain
 from evaltrim.lifecycle import infer_lifecycle, stale_status
 from evaltrim.llm.base import BehaviorExtractor
 from evaltrim.models import (
@@ -362,6 +365,15 @@ def analyze_suite(
     analysis.missing_boundaries = missing_boundary_candidates(suite)
     analysis.behavior_graph = behavior_graph(suite, analysis)
     analysis.compression = compression_stats(analysis)
+    analysis.clusters = cluster_behaviors(suite, analysis)["clusters"]
+    analysis.information_gain = compute_information_gain(suite, analysis)
+    analysis.failure_values = failure_detection_value(suite, analysis)
+    gain_by = {row["test_id"]: row["information_gain"] for row in analysis.information_gain}
+    fail_by = {row["test_id"]: row["failure_detection_value"] for row in analysis.failure_values}
+    for rec in analysis.recommendations:
+        if rec.evidence:
+            rec.evidence.information_gain = gain_by.get(rec.test_id)
+            rec.evidence.failure_detection_value = fail_by.get(rec.test_id)
     if use_cache and pair_limit is None:
         store_cached_analysis(suite, analysis)
         try:

@@ -47,8 +47,10 @@ class Provenance(BaseModel):
 
 class Usage(BaseModel):
     latency_ms: float | None = None
+    ttft_ms: float | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    total_tokens: int | None = None
     cost_usd: float | None = None
 
 

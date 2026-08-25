@@ -114,3 +114,25 @@ def select_portfolio(
             "Not a globally optimal solver."
         ),
     }
+
+
+def pareto_portfolios(
+    suite: TestSuite, result: AnalysisResult, *, max_tests: int | None = None
+) -> list[dict[str, Any]]:
+    """A few budget points, not a full multi-objective solver."""
+    n = len(suite.tests)
+    sizes = sorted({max(1, n // 4), max(1, n // 2), n if max_tests is None else min(n, max_tests)})
+    if max_tests:
+        sizes = sorted(set(sizes) | {max_tests})
+    out = []
+    for size in sizes:
+        row = select_portfolio(suite, result, max_tests=size)
+        out.append(
+            {
+                "max_tests": size,
+                "selected": row["selected"],
+                "used_cost": row["used_cost"],
+                "used_time_ms": row["used_time_ms"],
+            }
+        )
+    return out

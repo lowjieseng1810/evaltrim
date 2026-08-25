@@ -121,6 +121,12 @@ def _load(suite: Path):
     return loaded
 
 
+def _emit_json(command: str, payload: dict) -> None:
+    from evaltrim.contract import dumps
+
+    sys.stdout.write(dumps(command, payload) + "\n")
+
+
 def _write(text: str, output: Path | None) -> None:
     if output:
         output.write_text(text, encoding="utf-8")
@@ -555,20 +561,25 @@ def impacted_tests_cmd(
     suite: Path = typer.Argument(..., help="Suite YAML/JSON"),
     changed_paths: list[str] = typer.Argument(..., help="Changed file paths"),
     format: str = typer.Option("json", "--format", help="json|table"),
+    safety_sample: float = typer.Option(0.05, "--safety-sample", help="Fraction of non-targeted tests to keep."),
 ) -> None:
     """Heuristic impacted-test selection. Not perfect dependency analysis."""
-    import json
 
-    from evaltrim.impacted import impacted_tests
+    from evaltrim.impacted import impacted_tests, select_execution_set
 
     try:
         loaded = _load(suite)
         rows = impacted_tests(loaded, changed_paths)
+        selection = select_execution_set(rows, safety_sample=safety_sample)
     except EvalTrimError as exc:
         _fail(exc)
     if format == "json":
-        payload = {"tests": rows, "note": "Heuristic priorities; not a complete call graph."}
-        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        payload = {
+            "tests": rows,
+            "execution": selection,
+            "note": "Heuristic priorities; not a complete call graph.",
+        }
+        _emit_json("impacted-tests", payload)
         return
     for row in rows:
         console.print(f"{row['priority']:14} {row['test_id']}")
@@ -642,6 +653,9 @@ def portfolio(
         loaded = _load(suite)
         result = analyze_suite(loaded)
         payload = select_portfolio(loaded, result, max_tests=max_tests, max_cost=max_cost, max_time_ms=max_time_ms)
+        from evaltrim.intelligence.portfolio import pareto_portfolios
+
+        payload = {**payload, "pareto": pareto_portfolios(loaded, result, max_tests=max_tests)}
     except EvalTrimError as exc:
         _fail(exc)
     if format == "json":
@@ -724,7 +738,7 @@ def compare_runs_cmd(
         return [data]
 
     payload = compare_runs(_cases(baseline), _cases(current))
-    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    _emit_json("compare-runs", payload)
 
 
 @app.command("ingest-traces")
@@ -886,6 +900,100 @@ def flaky(
 ) -> None:
     """Alias for flake-report."""
     flake_report_cmd(suite=suite, format=format)
+
+
+@app.command()
+def redteam(format: str = typer.Option("json", "--format")) -> None:
+    """Run local security probes. Not a vendor attack catalog."""
+    from evaltrim.security import evaluate_security
+
+    payload = evaluate_security()
+    _emit_json("redteam", payload)
+
+
+@app.command()
+def mutate(format: str = typer.Option("json", "--format")) -> None:
+    """Grader mutation score on constructed probes."""
+    from evaltrim.intelligence.mutation import mutation_score
+
+    _emit_json("mutate", mutation_score())
+
+
+@app.command()
+def cluster(
+    suite: Path = typer.Argument(...),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Deterministic behavioral equivalence classes."""
+    from evaltrim.intelligence.clusters import cluster_behaviors
+
+    try:
+        loaded = _load(suite)
+        result = analyze_suite(loaded)
+        payload = cluster_behaviors(loaded, result)
+    except EvalTrimError as exc:
+        _fail(exc)
+    _emit_json("cluster", payload)
+
+
+@app.command("export-suite")
+def export_suite_cmd(
+    suite: Path = typer.Argument(...),
+    output: Path = typer.Option(..., "--output", "-o"),
+) -> None:
+    """Export a suite to YAML, JSON, or JSONL by suffix."""
+    from evaltrim.interop import export_suite
+
+    try:
+        loaded = _load(suite)
+        dest = export_suite(loaded, output)
+    except EvalTrimError as exc:
+        _fail(exc)
+    console.print(f"Wrote {dest}")
+
+
+@app.command("experiment-matrix")
+def experiment_matrix_cmd(
+    source: Path = typer.Argument(..., help="JSON list of runs with cases and dimensions"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Pareto comparison across recorded experiment runs."""
+    import json
+
+    from evaltrim.experiments import experiment_matrix
+
+    data = json.loads(source.read_text(encoding="utf-8"))
+    runs = data["runs"] if isinstance(data, dict) and "runs" in data else data
+    _emit_json("experiment-matrix", experiment_matrix(runs))
+
+
+@app.command("compress-failures")
+def compress_failures_cmd(
+    source: Path = typer.Argument(..., help="JSON list of production failures"),
+    suite: Path | None = typer.Option(None, "--suite"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Cluster production failures into families. Does not insert tests."""
+    import json
+
+    from evaltrim.ingest import compress_production_failures
+
+    records = json.loads(source.read_text(encoding="utf-8"))
+    if isinstance(records, dict):
+        records = records.get("failures") or records.get("records") or [records]
+    loaded = _load(suite) if suite else None
+    _emit_json("compress-failures", compress_production_failures(records, loaded))
+
+
+@app.command("competitive-benchmark")
+def competitive_benchmark_cmd(
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Run the in-repo competitive harness. Competitor cells stay UNMEASURED unless reproduced."""
+    from evaltrim.competitive import run_competitive_harness
+
+    payload = run_competitive_harness()
+    _emit_json("competitive-benchmark", payload)
 
 
 @app.command("store-reset")

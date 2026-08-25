@@ -68,5 +68,39 @@ def impacted_tests(suite: TestSuite, changed_paths: list[str]) -> list[dict[str,
     return rows
 
 
+def select_execution_set(
+    rows: list[dict[str, object]],
+    *,
+    safety_sample: float = 0.05,
+    seed: int = 0,
+) -> dict[str, object]:
+    """DIRECT/ADJACENT/CRITICAL/RISKY plus a configurable random safety sample of the rest."""
+    import random
+
+    targeted = {"CRITICAL", "DIRECT", "ADJACENT", "RISKY"}
+    must = [r for r in rows if str(r["priority"]) in targeted]
+    rest = [r for r in rows if str(r["priority"]) not in targeted]
+    rng = random.Random(seed)
+    k = int(round(len(rows) * max(0.0, min(1.0, safety_sample))))
+    extra = sorted(rest, key=lambda r: str(r["test_id"]))
+    rng.shuffle(extra)
+    sample = extra[: max(0, k)]
+    selected = must + [r for r in sample if r not in must]
+    selected_ids = {str(r["test_id"]) for r in selected}
+    return {
+        "selected": [str(r["test_id"]) for r in selected],
+        "buckets": {
+            "CRITICAL": [str(r["test_id"]) for r in rows if r["priority"] == "CRITICAL"],
+            "DIRECT": [str(r["test_id"]) for r in rows if r["priority"] == "DIRECT"],
+            "ADJACENT": [str(r["test_id"]) for r in rows if r["priority"] == "ADJACENT"],
+            "RISKY": [str(r["test_id"]) for r in rows if r["priority"] == "RISKY"],
+            "SAFETY_SAMPLE": [str(r["test_id"]) for r in sample],
+        },
+        "execution_reduction": round(1.0 - len(selected_ids) / max(len(rows), 1), 4),
+        "safety_sample": safety_sample,
+        "note": "Heuristic selection. Critical-test miss rate is measured only against labeled fixtures.",
+    }
+
+
 def _norm(path: str) -> str:
     return Path(path.replace("\\", "/")).as_posix().lower()

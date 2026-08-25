@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from evaltrim.models import DriftSource, RegressionClass
+from evaltrim.models import DriftSource, LikelySource, RegressionClass
 from evaltrim.normalize import normalize_text
 from evaltrim.similarity import jaccard, tokenize_normalized
+
+_PROVIDER_ERRORS = {
+    "provider",
+    "provider_error",
+    "timeout",
+    "rate_limit",
+    "http_5xx",
+    "5xx",
+    "infrastructure",
+    "network",
+}
 
 
 def _text_sim(a: str, b: str) -> float:
@@ -15,6 +26,14 @@ def _text_sim(a: str, b: str) -> float:
     if normalize_text(a) == normalize_text(b) and normalize_text(a):
         return 0.97
     return jaccard(tokenize_normalized(a), tokenize_normalized(b))
+
+
+def _env_error(row: dict[str, Any]) -> bool:
+    kind = str(row.get("error_kind") or row.get("failure_kind") or "").lower()
+    if kind in _PROVIDER_ERRORS:
+        return True
+    status = str(row.get("http_status") or "")
+    return status.startswith("5")
 
 
 def classify_run_delta(
@@ -40,10 +59,14 @@ def classify_run_delta(
     score_c = float(raw_c) if raw_c is not None else (1.0 if current.get("passed") else 0.0)
     lat_b = float(baseline.get("latency_ms") or 0.0)
     lat_c = float(current.get("latency_ms") or 0.0)
+    ttft_b = float(baseline.get("ttft_ms") or 0.0)
+    ttft_c = float(current.get("ttft_ms") or 0.0)
     cost_b = float(baseline.get("cost_usd") or 0.0)
     cost_c = float(current.get("cost_usd") or 0.0)
     tok_b = int(baseline.get("tokens") or 0)
     tok_c = int(current.get("tokens") or 0)
+    state_b = baseline.get("state")
+    state_c = current.get("state")
 
     passed_b = bool(baseline.get("passed", True))
     passed_c = bool(current.get("passed", True))
@@ -59,13 +82,37 @@ def classify_run_delta(
         "trajectory_equal": traj_b == traj_c,
         "grader_scores": {"before": score_b, "after": score_c},
         "latency_ms": {"before": lat_b, "after": lat_c},
+        "ttft_ms": {"before": ttft_b, "after": ttft_c},
         "cost_usd": {"before": cost_b, "after": cost_c},
         "tokens": {"before": tok_b, "after": tok_c},
+        "state_equal": state_b == state_c,
         "oracle_changed": oracle_changed,
         "agent_changed": out_b != out_c or tools_b != tools_c,
+        "provider_error": _env_error(current),
     }
 
-    if oracle_changed and passed_b == passed_c and sem >= 0.9:
+    identical = (
+        out_b == out_c
+        and tools_b == tools_c
+        and args_b == args_c
+        and traj_b == traj_c
+        and passed_b == passed_c
+        and not oracle_changed
+        and score_b == score_c
+        and state_b == state_c
+        and lat_b == lat_c
+        and ttft_b == ttft_c
+        and cost_b == cost_c
+        and tok_b == tok_c
+    )
+
+    if identical:
+        klass = RegressionClass.UNCHANGED
+        evidence.append("All compared channels are identical.")
+    elif _env_error(current) and passed_b and not passed_c:
+        klass = RegressionClass.UNCERTAIN
+        evidence.append("Pass→fail coincides with a provider/infrastructure error; not a model-quality regression.")
+    elif oracle_changed and passed_b == passed_c and sem >= 0.9:
         klass = RegressionClass.EXPECTED_CHANGE
         evidence.append("Oracle text changed while agent output stayed semantically close.")
     elif expected_change_paths:
@@ -80,6 +127,9 @@ def classify_run_delta(
     elif not passed_b and passed_c:
         klass = RegressionClass.EXPECTED_CHANGE
         evidence.append("Fail→pass; treated as an improvement unless policy says otherwise.")
+    elif out_b == out_c and tools_b == tools_c and passed_b == passed_c and (lat_b != lat_c or cost_b != cost_c):
+        klass = RegressionClass.UNCERTAIN
+        evidence.append("Quality channels unchanged; latency/cost/tokens moved (environmental noise possible).")
     elif out_b != out_c and passed_b and passed_c:
         klass = RegressionClass.UNCERTAIN
         evidence.append("Output changed but graders still pass.")
@@ -87,10 +137,11 @@ def classify_run_delta(
         klass = RegressionClass.UNCERTAIN
         evidence.append("Insufficient signal to call a regression.")
 
-    drift = classify_drift_source(baseline, current, oracle_changed=oracle_changed)
+    drift = classify_drift_source(baseline, current, oracle_changed=oracle_changed, env_error=_env_error(current))
     return {
         "class": klass.value,
-        "likely_source": drift["source"],
+        "likely_source": drift["attribution"],
+        "drift_kind": drift["source"],
         "likely_source_confidence": drift["confidence"],
         "evidence": evidence,
         "channels": channels,
@@ -103,6 +154,7 @@ def classify_drift_source(
     current: dict[str, Any],
     *,
     oracle_changed: bool,
+    env_error: bool = False,
 ) -> dict[str, Any]:
     model_b, model_c = baseline.get("model"), current.get("model")
     provider_b, provider_c = baseline.get("provider"), current.get("provider")
@@ -111,19 +163,59 @@ def classify_drift_source(
     config_b, config_c = baseline.get("config_hash"), current.get("config_hash")
     code_b, code_c = baseline.get("code_hash"), current.get("code_hash")
 
+    if env_error:
+        return {
+            "source": DriftSource.ENVIRONMENT_CHANGE.value,
+            "attribution": LikelySource.ENVIRONMENT.value,
+            "confidence": 0.7,
+        }
     if oracle_changed and prompt_b == prompt_c and model_b == model_c:
-        return {"source": DriftSource.TEST_ORACLE_CHANGE.value, "confidence": 0.72}
-    if model_b != model_c or provider_b != provider_c:
-        return {"source": DriftSource.MODEL_PROVIDER_CHANGE.value, "confidence": 0.7}
+        return {
+            "source": DriftSource.TEST_ORACLE_CHANGE.value,
+            "attribution": LikelySource.ORACLE.value,
+            "confidence": 0.72,
+        }
+    if provider_b != provider_c and provider_b is not None:
+        return {
+            "source": DriftSource.MODEL_PROVIDER_CHANGE.value,
+            "attribution": LikelySource.PROVIDER.value,
+            "confidence": 0.7,
+        }
+    if model_b != model_c:
+        return {
+            "source": DriftSource.MODEL_PROVIDER_CHANGE.value,
+            "attribution": LikelySource.MODEL.value,
+            "confidence": 0.7,
+        }
     if schema_b != schema_c and schema_b is not None:
-        return {"source": DriftSource.TOOL_SCHEMA_CHANGE.value, "confidence": 0.68}
+        return {
+            "source": DriftSource.TOOL_SCHEMA_CHANGE.value,
+            "attribution": LikelySource.TOOL.value,
+            "confidence": 0.68,
+        }
     if prompt_b != prompt_c and prompt_b is not None:
-        return {"source": DriftSource.PROMPT_CHANGE.value, "confidence": 0.66}
+        return {
+            "source": DriftSource.PROMPT_CHANGE.value,
+            "attribution": LikelySource.PROMPT.value,
+            "confidence": 0.66,
+        }
     if config_b != config_c and config_b is not None:
-        return {"source": DriftSource.CONFIGURATION_CHANGE.value, "confidence": 0.64}
+        return {
+            "source": DriftSource.CONFIGURATION_CHANGE.value,
+            "attribution": LikelySource.CONFIG.value,
+            "confidence": 0.64,
+        }
     if code_b != code_c and code_b is not None:
-        return {"source": DriftSource.CODE_CHANGE.value, "confidence": 0.62}
-    return {"source": DriftSource.UNCERTAIN.value, "confidence": 0.35}
+        return {
+            "source": DriftSource.CODE_CHANGE.value,
+            "attribution": LikelySource.CODE.value,
+            "confidence": 0.62,
+        }
+    return {
+        "source": DriftSource.UNCERTAIN.value,
+        "attribution": LikelySource.UNKNOWN.value,
+        "confidence": 0.35,
+    }
 
 
 def compare_runs(baseline_cases: list[dict[str, Any]], current_cases: list[dict[str, Any]]) -> dict[str, Any]:

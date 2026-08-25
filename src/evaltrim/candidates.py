@@ -17,9 +17,16 @@ class CandidatePairGenerator:
     Similarity may create candidates. It never authorizes RETIRE by itself.
     """
 
-    def __init__(self, *, full_pairwise_limit: int = 200, neighbor_k: int = 40) -> None:
+    def __init__(
+        self,
+        *,
+        full_pairwise_limit: int = 200,
+        neighbor_k: int = 40,
+        max_block_df: int = 48,
+    ) -> None:
         self.full_pairwise_limit = full_pairwise_limit
         self.neighbor_k = neighbor_k
+        self.max_block_df = max_block_df
 
     def pairs(
         self,
@@ -33,6 +40,11 @@ class CandidatePairGenerator:
             return []
         if n <= self.full_pairwise_limit:
             return [(i, j) for i in range(n) for j in range(i + 1, n)]
+        neighbor_k = self.neighbor_k
+        if n > 5000:
+            neighbor_k = min(neighbor_k, 4)
+        elif n > 2000:
+            neighbor_k = min(neighbor_k, 8)
 
         found: set[tuple[int, int]] = set()
 
@@ -90,18 +102,19 @@ class CandidatePairGenerator:
             for term in set(toks):
                 postings[term].append(i)
         df = {term: len(ids) for term, ids in postings.items()}
+        df_cap = min(self.max_block_df, max(12, int(n * 0.08)))
 
         for i, toks in enumerate(tokens_by_doc):
             scores: dict[int, float] = defaultdict(float)
             ranked_terms = sorted(set(toks), key=lambda t: df.get(t, n))
             for term in ranked_terms[:12]:
                 idf = 1.0 / max(df.get(term, 1), 1)
-                if df.get(term, n) > n * 0.4:
+                if df.get(term, n) > df_cap:
                     continue
                 for j in postings[term]:
                     if j != i:
                         scores[j] += idf
-            neighbors = sorted(scores, key=lambda j: (-scores[j], j))[: self.neighbor_k]
+            neighbors = sorted(scores, key=lambda j: (-scores[j], j))[:neighbor_k]
             for j in neighbors:
                 add(i, j)
 
