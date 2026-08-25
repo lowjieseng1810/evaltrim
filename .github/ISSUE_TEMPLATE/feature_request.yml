@@ -1,0 +1,11 @@
+name: Feature request
+description: A maintenance or analysis capability that is still missing
+labels: [enhancement]
+body:
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this helps suite maintenance
+      description: Tie the idea to redundancy, unique witnesses, simulation, or reports.
+    validations:
+      required: true

@@ -1,0 +1,219 @@
+"""Markdown, JSON, and GitHub PR comment rendering."""
+
+from __future__ import annotations
+
+from evaltrim.models import (
+    AnalysisResult,
+    MaintenanceReport,
+    RecommendationState,
+    RemovalSimulation,
+    Verdict,
+)
+
+
+def render_markdown(result: AnalysisResult) -> str:
+    s = result.summary
+    c = result.coverage
+    lines = [
+        "# EvalTrim Report",
+        "",
+        "## Summary",
+        "",
+        f"{s.test_count} tests analyzed",
+        f"{s.keep} recommended KEEP",
+        f"{s.merge} MERGE",
+        f"{s.retire} RETIRE",
+        f"{s.review} REVIEW",
+        "",
+        "Critical behavior coverage:",
+        f"{c.critical_coverage * 100:.1f}%",
+        "",
+        "Behavior coverage:",
+        f"{c.behavior_coverage * 100:.1f}%",
+        "",
+        "Potential CI reduction:",
+        f"{s.estimated_ci_reduction * 100:.0f}%",
+        "",
+        "> Potential CI reduction counts MERGE + RETIRE recommendations. "
+        "It is a review queue, not an automatic deletion plan.",
+        "",
+        "## Top Retirement Candidates",
+        "",
+    ]
+    retire = [r for r in result.recommendations if r.state == RecommendationState.RETIRE]
+    if not retire:
+        lines.append("None. No test met the stale + redundant + non-unique bar.")
+    else:
+        for rec in retire[:20]:
+            reason = rec.reasons[0] if rec.reasons else ""
+            lines.append(f"- `{rec.test_id}` (value {rec.value_score:.1f}) — {reason}")
+    lines += ["", "## Unique Witnesses", ""]
+    unique = [w for w in result.witnesses if w.unique_atoms]
+    if not unique:
+        lines.append("No singleton behavior atoms in this suite.")
+    else:
+        for w in unique[:30]:
+            atoms = ", ".join(w.unique_atoms[:8])
+            lines.append(f"- `{w.test_id}`: {atoms}")
+    lines += ["", "## Critical Behaviors", ""]
+    if s.declared_critical_behaviors:
+        for name in s.declared_critical_behaviors:
+            status = "covered" if name not in c.uncovered_critical else "**uncovered**"
+            lines.append(f"- `{name}`: {status}")
+    else:
+        lines.append("No `critical_behaviors` declared at suite level.")
+    if c.uncovered_critical:
+        lines.append("")
+        lines.append("Uncovered critical behaviors: " + ", ".join(f"`{x}`" for x in c.uncovered_critical))
+    lines += ["", "## Coverage Risks", ""]
+    risks = [e for e in result.evidence if e.is_critical_witness]
+    if not risks:
+        lines.append("No singleton critical witnesses detected.")
+    else:
+        for e in risks[:20]:
+            lines.append(
+                f"- `{e.test_id}` uniquely protects critical-adjacent behavior "
+                f"({', '.join(e.unique_atoms[:6]) or 'critical flag'})."
+            )
+    if result.conflicts:
+        lines += ["", "Oracle conflicts (similar inputs, diverging expected):"]
+        for cid in result.conflicts:
+            lines.append(f"- `{cid}`")
+    lines += ["", "## Recommendations", ""]
+    for rec in result.recommendations:
+        lines.append(f"### `{rec.test_id}` — {rec.state.value}")
+        lines.append(f"Value score (heuristic): {rec.value_score:.1f}/100 · confidence {rec.confidence:.2f}")
+        for reason in rec.reasons:
+            lines.append(f"- {reason}")
+        lines.append("")
+    lines += [
+        "## Redundant Pairs",
+        "",
+    ]
+    if not result.pairs:
+        lines.append("No pairs above the redundancy threshold.")
+    else:
+        for pair in result.pairs[:40]:
+            lines.append(
+                f"- `{pair.left_id}` ↔ `{pair.right_id}`: **{pair.score:.2f}** "
+                f"(semantic {pair.semantic:.2f}, behavior {pair.behavior_overlap:.2f}, "
+                f"expected {pair.expected_similarity:.2f}, history {pair.historical_overlap:.2f})"
+            )
+            lines.append(f"  {pair.rationale}")
+    lines += ["", "## Methodology", "", result.methodology, ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_github_comment(result: AnalysisResult, *, report_path: str = "evaltrim-report.md") -> str:
+    s = result.summary
+    c = result.coverage
+    unique_n = sum(1 for w in result.witnesses if w.unique_atoms)
+    redundant_n = len({p.left_id for p in result.pairs} | {p.right_id for p in result.pairs})
+    crit = f"{c.critical_coverage * 100:.0f}%"
+    lines = [
+        "## EvalTrim",
+        "",
+        f"{s.test_count} tests analyzed",
+        f"Potentially redundant: {redundant_n}",
+        f"Unique witnesses: {unique_n}",
+        f"Retirement candidates: {s.retire}",
+        "",
+        "Critical behavior coverage:",
+        f"{crit} -> {crit}",
+        "",
+        "Estimated CI cost reduction:",
+        f"{s.estimated_ci_reduction * 100:.0f}%",
+        "",
+    ]
+    if c.uncovered_critical:
+        lines.append("Critical coverage gaps: " + ", ".join(c.uncovered_critical))
+    else:
+        lines.append("No critical coverage loss detected.")
+    lines += ["", f"View full report: `{report_path}`", ""]
+    return "\n".join(lines)
+
+
+def render_simulation_markdown(sim: RemovalSimulation) -> str:
+    b, a = sim.before_coverage, sim.after_coverage
+    lines = [
+        f"# Removal simulation: `{sim.test_id}`",
+        "",
+        "## BEFORE",
+        f"Tests: {sim.before_tests}",
+        f"Behavior coverage: {b.behavior_coverage * 100:.1f}%",
+        f"Critical coverage: {b.critical_coverage * 100:.1f}%",
+        "",
+        f"## AFTER removing `{sim.test_id}`",
+        f"Tests: {sim.after_tests}",
+        f"Behavior coverage: {b.behavior_coverage * 100:.1f}% -> {a.behavior_coverage * 100:.1f}%",
+        f"Critical coverage: {b.critical_coverage * 100:.1f}% -> {a.critical_coverage * 100:.1f}%",
+        "",
+        f"Verdict: **{sim.verdict.value}**",
+        "",
+    ]
+    if sim.verdict == Verdict.KEEP:
+        lines.append("Reason: " + (sim.reasons[0] if sim.reasons else "Coverage loss."))
+    for reason in sim.reasons:
+        lines.append(f"- {reason}")
+    if sim.lost_atoms:
+        lines += ["", "Lost atoms:", ""]
+        for atom in sim.lost_atoms:
+            lines.append(f"- `{atom}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_maintenance_markdown(report: MaintenanceReport) -> str:
+    s = report.summary
+    lines = [
+        "# EvalTrim Maintenance Report",
+        "",
+        f"Generated: {report.generated_at.isoformat()}",
+        "",
+        "## Snapshot",
+        "",
+        f"- Tests: {s.test_count}",
+        f"- KEEP / MERGE / RETIRE / REVIEW: {s.keep} / {s.merge} / {s.retire} / {s.review}",
+        f"- Critical coverage: {report.critical_coverage * 100:.1f}%",
+        f"- Estimated suite reduction (review queue): {report.estimated_suite_reduction * 100:.0f}%",
+        "",
+        "## Candidate merges",
+        "",
+    ]
+    if not report.candidate_merges:
+        lines.append("None.")
+    else:
+        for pair in report.candidate_merges[:40]:
+            lines.append(f"- `{pair.left_id}` + `{pair.right_id}` ({pair.score:.2f}) — {pair.rationale}")
+    lines += ["", "## Candidate retirements", ""]
+    if not report.candidate_retirements:
+        lines.append("None.")
+    else:
+        for rec in report.candidate_retirements:
+            lines.append(f"- `{rec.test_id}`: {rec.reasons[0] if rec.reasons else rec.state.value}")
+    lines += ["", "## Stale cases", ""]
+    if not report.stale_cases:
+        lines.append("None flagged.")
+    else:
+        for tid in report.stale_cases:
+            lines.append(f"- `{tid}`")
+    lines += ["", "## Unique witnesses", ""]
+    for w in report.unique_witnesses[:40]:
+        lines.append(f"- `{w.test_id}`: {w.summary}")
+    lines += ["", "## Evidence notes", ""]
+    for note in report.notes:
+        lines.append(f"- {note}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def result_to_json(result: AnalysisResult) -> str:
+    return result.model_dump_json(indent=2)
+
+
+def maintenance_to_json(report: MaintenanceReport) -> str:
+    return report.model_dump_json(indent=2)
+
+
+def simulation_to_json(sim: RemovalSimulation) -> str:
+    return sim.model_dump_json(indent=2)

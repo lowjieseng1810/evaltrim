@@ -1,0 +1,155 @@
+"""Benchmark harness: precision/recall vs ground truth, safety, runtime, repeatability."""
+
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from evaltrim.analyze import analyze_suite
+from evaltrim.models import RecommendationState, TestSuite
+from evaltrim.parser import load_suite
+
+
+def load_metadata(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[str, Any]:
+    suite = load_suite(suite_path)
+    meta = load_metadata(metadata_path or suite_path.parent / "benchmark_metadata.yaml")
+    t0 = time.perf_counter()
+    result = analyze_suite(suite)
+    elapsed = time.perf_counter() - t0
+    result2 = analyze_suite(suite)
+    deterministic = _equivalent(result, result2)
+
+    redundant_pred = _predicted_redundant_groups(result, suite)
+    expected_groups = [set(g) for g in meta.get("expected_redundant_groups", [])]
+    precision, recall = _set_prf(redundant_pred, expected_groups)
+
+    expected_unique = set(meta.get("expected_unique_witnesses", []))
+    pred_unique = {w.test_id for w in result.witnesses if w.unique_atoms}
+    unique_precision, unique_recall = _binary_prf(pred_unique, expected_unique)
+
+    expected_critical = set(meta.get("expected_critical_cases", []))
+    retire_ids = {r.test_id for r in result.recommendations if r.state == RecommendationState.RETIRE}
+    unsafe_retire = sorted(retire_ids & expected_critical)
+    retirement_safety = 1.0 if not unsafe_retire else 0.0
+
+    reduction = result.summary.estimated_ci_reduction
+    return {
+        "suite": str(suite_path),
+        "tests": result.summary.test_count,
+        "runtime_seconds": round(elapsed, 4),
+        "deterministic": deterministic,
+        "redundancy_precision": precision,
+        "redundancy_recall": recall,
+        "unique_witness_precision": unique_precision,
+        "unique_witness_recall": unique_recall,
+        "retirement_safety_rate": retirement_safety,
+        "unsafe_retirements": unsafe_retire,
+        "critical_coverage": result.coverage.critical_coverage,
+        "suite_reduction": reduction,
+        "keep": result.summary.keep,
+        "merge": result.summary.merge,
+        "retire": result.summary.retire,
+        "review": result.summary.review,
+        "predicted_redundant_groups": [sorted(g) for g in redundant_pred],
+    }
+
+
+def run_all_benchmarks(root: Path) -> dict[str, Any]:
+    suites = sorted(root.glob("*/suite.yaml"))
+    results = []
+    for suite_path in suites:
+        results.append(run_benchmark(suite_path, suite_path.parent / "benchmark_metadata.yaml"))
+    return {
+        "benchmarks": results,
+        "targets": {
+            "redundancy_precision": 0.90,
+            "critical_coverage_preservation": 1.0,
+            "suite_reduction": [0.20, 0.40],
+            "runtime_seconds_per_1000": 60,
+            "deterministic_repeatability": True,
+            "note": "These are target metrics, not claims. Compare measured values below.",
+        },
+    }
+
+
+def _predicted_redundant_groups(result, suite: TestSuite) -> list[set[str]]:
+    parent: dict[str, str] = {t.id: t.id for t in suite.tests}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for pair in result.pairs:
+        if pair.recommendation in {RecommendationState.MERGE, RecommendationState.RETIRE} or pair.score >= 0.9:
+            if pair.recommendation != RecommendationState.KEEP:
+                union(pair.left_id, pair.right_id)
+    groups: dict[str, set[str]] = {}
+    for tid in parent:
+        groups.setdefault(find(tid), set()).add(tid)
+    return [g for g in groups.values() if len(g) > 1]
+
+
+def _set_prf(predicted: list[set[str]], expected: list[set[str]]) -> tuple[float | None, float | None]:
+    if not expected:
+        return None, None
+    # A predicted group is a true positive if it equals or is a subset of an expected group
+    # with at least 2 overlapping ids, using pair-level scoring for stability.
+    exp_pairs = _pairs(expected)
+    pred_pairs = _pairs(predicted)
+    if not pred_pairs and not exp_pairs:
+        return 1.0, 1.0
+    if not pred_pairs:
+        return 0.0, 0.0
+    tp = len(pred_pairs & exp_pairs)
+    precision = tp / len(pred_pairs) if pred_pairs else 0.0
+    recall = tp / len(exp_pairs) if exp_pairs else 0.0
+    return round(precision, 4), round(recall, 4)
+
+
+def _pairs(groups: Iterable[set[str]]) -> set[tuple[str, str]]:
+    out: set[tuple[str, str]] = set()
+    for group in groups:
+        items = sorted(group)
+        for i, a in enumerate(items):
+            for b in items[i + 1 :]:
+                out.add((a, b))
+    return out
+
+
+def _binary_prf(pred: set[str], expected: set[str]) -> tuple[float | None, float | None]:
+    if not expected:
+        return None, None
+    tp = len(pred & expected)
+    precision = tp / len(pred) if pred else 0.0
+    recall = tp / len(expected) if expected else 0.0
+    return round(precision, 4), round(recall, 4)
+
+
+def _equivalent(a, b) -> bool:
+    sa = json.dumps([r.model_dump(mode="json") for r in a.recommendations], sort_keys=True)
+    sb = json.dumps([r.model_dump(mode="json") for r in b.recommendations], sort_keys=True)
+    return sa == sb
+
+
+def retirement_safety_check(suite: TestSuite, critical_ids: set[str]) -> bool:
+    result = analyze_suite(suite)
+    retire = {r.test_id for r in result.recommendations if r.state == RecommendationState.RETIRE}
+    return retire.isdisjoint(critical_ids)

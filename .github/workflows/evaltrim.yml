@@ -1,0 +1,74 @@
+name: EvalTrim
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Path to the eval suite
+        required: false
+        default: examples/demo_suite.yaml
+      strict:
+        description: Fail the job on policy violations
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install EvalTrim
+        run: pip install .
+
+      - name: Analyze suite
+        env:
+          SUITE: ${{ github.event.inputs.suite || 'examples/demo_suite.yaml' }}
+          STRICT: ${{ github.event.inputs.strict || 'false' }}
+        run: |
+          mkdir -p artifacts
+          ARGS=(analyze "$SUITE" --format markdown --output artifacts/evaltrim-report.md)
+          if [ "$STRICT" = "true" ]; then
+            ARGS+=(--strict)
+          fi
+          # Never fail the build by default. Strict mode is opt-in.
+          set +e
+          evaltrim "${ARGS[@]}"
+          status=$?
+          set -e
+          evaltrim analyze "$SUITE" --format github --output artifacts/evaltrim-pr.md
+          evaltrim analyze "$SUITE" --format json --output artifacts/evaltrim-report.json
+          if [ "$STRICT" = "true" ] && [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaltrim-report
+          path: artifacts/
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('artifacts/evaltrim-pr.md', 'utf8');
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

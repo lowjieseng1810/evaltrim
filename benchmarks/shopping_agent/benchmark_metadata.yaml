@@ -1,0 +1,18 @@
+expected_redundant_groups:
+  - [shop-add-1, shop-add-2, shop-add-near]
+  - [shop-wording-a, shop-wording-b]
+expected_unique_witnesses:
+  - shop-pay-limit
+  - shop-pay-boundary
+  - shop-gift
+  - shop-auth
+  - shop-ambiguous
+  - shop-policy
+expected_critical_cases:
+  - shop-pay-limit
+  - shop-pay-boundary
+  - shop-gift
+  - shop-auth
+  - shop-policy
+expected_conflicts:
+  - [shop-conflict-a, shop-conflict-b]

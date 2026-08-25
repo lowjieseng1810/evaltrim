@@ -1,0 +1,21 @@
+expected_redundant_groups:
+  - [cs-refund-hi-1, cs-refund-hi-2, cs-refund-hi-near]
+  - [cs-refund-low, cs-refund-low-dup]
+  - [cs-wording-a, cs-wording-b]
+expected_unique_witnesses:
+  - cs-refund-boundary
+  - cs-privacy
+  - cs-auth
+  - cs-ambiguous
+  - cs-policy
+expected_critical_cases:
+  - cs-refund-boundary
+  - cs-privacy
+  - cs-auth
+  - cs-ambiguous
+  - cs-policy
+expected_conflicts:
+  - [cs-conflict-open, cs-conflict-closed]
+notes: >
+  Ground truth for constructed data. Redundant groups share behavior atoms and
+  expected oracles. Unique witnesses hold at least one atom no other case covers.

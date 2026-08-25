@@ -1,0 +1,16 @@
+name: Bug report
+description: Something in EvalTrim is wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Command, suite snippet, and expected vs actual.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: EvalTrim version
+      placeholder: 0.1.0
