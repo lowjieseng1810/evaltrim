@@ -41,9 +41,9 @@ from evaltrim.models import (
 )
 from evaltrim.oracle import analyze_oracles
 from evaltrim.recommend import recommend
-from evaltrim.scoring import value_score
+from evaltrim.scoring import value_components, value_score
 from evaltrim.similarity import SimilarityEngine
-from evaltrim.simulate import RemovalIndex, simulate_from_index, simulate_removal
+from evaltrim.simulate import RemovalIndex, RemovalSimulation, simulate_cached, simulate_removal
 
 
 def _pair_fields(raw: dict[str, Any]) -> tuple[float, float, float, float, float, list[str], list[str], list[str]]:
@@ -60,9 +60,8 @@ def _pair_fields(raw: dict[str, Any]) -> tuple[float, float, float, float, float
 
 
 METHODOLOGY = (
-    "Scores are heuristics, not statistical guarantees. Semantic similarity combines "
-    "normalized-token overlap, character n-grams, corpus-free TF cosine, and collection TF-IDF. "
-    "Optional hashing embeddings or an LLM comparator may be enabled explicitly. "
+    "Scores are heuristics, not statistical guarantees. Semantic similarity is three-tier: "
+    "cheap lexical (tier 1), local hashing representation (tier 2), optional encoder/LLM (tier 3). "
     "Embeddings and semantic retrieval may CREATE CANDIDATES; they never independently authorize RETIRE. "
     "Redundancy also uses Jaccard overlap of behavior atoms, expected-oracle similarity, and historical "
     "failure-rate closeness. Candidate generation uses full pairwise comparison below "
@@ -70,7 +69,8 @@ METHODOLOGY = (
     "optional embeddings) above it. Unique witnesses include singleton atoms, condition combinations, "
     "boundaries, unique requirements, and unique failure families. "
     "Removal is simulated in memory and never deletes files. KEEP always wins over RETIRE when "
-    "a test is the only witness for a critical behavior. A high semantic score alone never retires."
+    "a test is the only witness for a critical behavior. A high semantic score alone never retires. "
+    "Counterfactual results are reused across equivalent coverage signatures; safety math is unchanged."
 )
 
 
@@ -227,18 +227,34 @@ def analyze_suite(
     evidence: list[TestEvidence] = []
     recommendations = []
     witnesses: list[WitnessRecord] = []
+    sim_cache: dict[tuple[object, ...], RemovalSimulation] = {}
+    simulations_run = 0
     for test, behavior in zip(tests, behaviors, strict=True):
-        sim = simulate_from_index(rem_index, test.id)
+        before = len(sim_cache)
+        sim = simulate_cached(rem_index, test.id, sim_cache)
+        if len(sim_cache) > before:
+            simulations_run += 1
         uniq = unique.get(test.id, [])
         uniq_crit = _unique_critical(test.id, behavior, tests, behaviors, declared, uniq)
         if test.id in req_unique:
             uniq_crit = sorted(set(uniq_crit) | {f"requirement:{r}" for r in req_unique[test.id]})
+        components = value_components(
+            test,
+            behavior,
+            unique_atoms=uniq,
+            total_atoms=len(universe),
+            max_cost=max_cost,
+            weights=cfg.value_weights,
+            requirement_n=len(test.requirement_ids),
+        )
         score = value_score(
             test,
             behavior,
             unique_atoms=uniq,
             total_atoms=len(universe),
             max_cost=max_cost,
+            weights=cfg.value_weights,
+            requirement_n=len(test.requirement_ids),
         )
         low_conf = behavior.confidence < 0.5 or (behavior.source == "heuristic" and behavior.domain == "unknown")
         life = infer_lifecycle(test, conflict=test.id in conflict_ids, stale_days=cfg.stale_days)
@@ -288,6 +304,7 @@ def analyze_suite(
                 conflict=test.id in conflict_ids,
                 lifecycle=life.value,
                 stale_status=stale_status(test, stale_days=cfg.stale_days).value,
+                value_components=components,
             )
         )
         extra = []
@@ -356,6 +373,8 @@ def analyze_suite(
             "total_seconds": round(total, 6),
             "pair_cache_hits": pair_hits,
             "pair_cache_misses": pair_misses,
+            "simulations_executed": float(simulations_run),
+            "simulation_cache_entries": float(len(sim_cache)),
         },
         candidate_pairs_considered=len(index_pairs),
         embeddings_used=encoder is not None,

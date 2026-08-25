@@ -1,0 +1,30 @@
+scenario:
+  id: refund-confused
+  persona: confused
+  style: cooperative
+  state:
+    order: unknown
+  end_state:
+    order: found
+  steps:
+    - user: "I think I need money back but I'm not sure of the order id"
+      expected: "ask for the order"
+      set_state:
+        order: asked
+    - expect_state:
+        order: asked
+    - tool:
+        name: lookup_order
+        arguments:
+          id: ORD-1
+      set_state:
+        order: found
+    - user: "yes that's the one"
+      expected: "confirm"
+      assertion:
+        contains: confirm
+    - branch:
+        when:
+          order: missing
+      user: "this branch should skip"
+      expected: "unused"

@@ -27,7 +27,7 @@ def test_customer_support_benchmark_safety():
 
 def test_all_benchmarks_preserve_criticals():
     payload = run_all_benchmarks(Path("benchmarks"))
-    assert len(payload["benchmarks"]) == 3
+    assert len(payload["benchmarks"]) >= 3
     for row in payload["benchmarks"]:
-        assert row["retirement_safety_rate"] == 1.0
         assert row["deterministic"] is True
+        assert row["retirement_safety_rate"] == 1.0

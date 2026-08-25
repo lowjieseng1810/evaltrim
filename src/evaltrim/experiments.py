@@ -65,8 +65,11 @@ def compare_experiments(
         "regression": cmp["counts"],
         "critical_failures": [c["id"] for c in cmp["cases"] if c.get("class") == "CONFIRMED_REGRESSION"],
         "latency_significance": stats,
+        "verdict": _experiment_verdict(quality, cost, latency, stats),
         "cache": "miss",
         "note": "Comparison is deterministic for the same recorded cases. Not a live model call.",
+        "reproducible": True,
+        "manifest_fingerprint": key,
     }
     put_kv("experiment", key, {**payload, "cache": "hit"})
     return payload
@@ -109,9 +112,13 @@ def experiment_matrix(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "BEST_QUALITY": best_quality,
         "BEST_COST": best_cost,
         "BEST_LATENCY": best_latency,
+        "BEST_PARETO": best_pareto,
         "BEST_PARETO_OPTION": best_pareto,
         "pareto_frontier": pareto,
-        "note": "Pareto over maximize quality, minimize cost, minimize latency. Evidence is recorded metrics only.",
+        "note": (
+            "Pareto over maximize quality, minimize cost, minimize latency. "
+            "Evidence is recorded metrics only. Not a proven global optimum."
+        ),
     }
 
 
@@ -121,6 +128,95 @@ def expand_dimensions(axes: dict[str, list[Any]]) -> list[dict[str, Any]]:
     for values in product(*(axes[k] for k in keys)):
         combos.append(dict(zip(keys, values, strict=True)))
     return combos
+
+
+def plan_experiment(
+    axes: dict[str, list[Any]],
+    *,
+    dry_run: bool = False,
+    smoke: bool = False,
+    repeats: int = 1,
+) -> dict[str, Any]:
+    combos = expand_dimensions(axes)
+    if smoke:
+        combos = combos[:1]
+    return {
+        "combos": combos,
+        "n": len(combos),
+        "repeats": repeats,
+        "dry_run": dry_run,
+        "smoke": smoke,
+        "note": "Dry/smoke planning only. Execute recorded runs separately; no live provider calls.",
+    }
+
+
+def write_manifest(path: Any, payload: dict[str, Any]) -> None:
+    from pathlib import Path
+
+    dest = Path(path)
+    dest.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def load_manifest(path: Any) -> dict[str, Any]:
+    from pathlib import Path
+
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def replay_manifest(path: Any) -> dict[str, Any]:
+    """Recompute matrix/compare from a saved manifest. Same bytes → same verdicts."""
+    data = load_manifest(path)
+    if "runs" in data:
+        return experiment_matrix(data["runs"])
+    if "baseline" in data and "current" in data:
+        return compare_experiments(data["baseline"], data["current"], label=str(data.get("label") or "experiment"))
+    raise ValueError("manifest must contain runs or baseline/current cases")
+
+
+def _experiment_verdict(
+    quality: dict[str, Any],
+    cost: dict[str, float],
+    latency: dict[str, float],
+    stats: dict[str, Any],
+) -> dict[str, Any]:
+    n = max(int(quality.get("n_after") or 0), 1)
+    q_before = (quality.get("pass_before") or 0) / max(int(quality.get("n_before") or 0), 1)
+    q_after = (quality.get("pass_after") or 0) / n
+    dq = q_after - q_before
+    dc = float(cost["after"]) - float(cost["before"])
+    tiny = abs(dq) < 0.02 and abs(dc) < 0.01
+    significant = bool(stats.get("statistically_significant"))
+    practical = bool(stats.get("practically_significant", not tiny))
+    if dq > 0.02 and dc <= 0:
+        label = "RECOMMENDED"
+        why = "Quality improved without a cost increase."
+    elif dq > 0.02 and dc > 0:
+        label = "TRADEOFF"
+        why = "Quality improved with a cost regression."
+    elif dq < -0.02:
+        label = "REGRESSION"
+        why = "Quality dropped. Lower cost does not excuse a quality regression."
+    elif significant and tiny:
+        label = "INCONCLUSIVE"
+        why = "Statistically significant but practically tiny change."
+    elif not significant and tiny:
+        label = "INCONCLUSIVE"
+        why = "No meaningful quality or cost movement."
+    else:
+        label = "TRADEOFF" if dq >= 0 else "REGRESSION"
+        why = "Mixed quality/cost/latency movement; inspect evidence."
+    return {
+        "label": label,
+        "why": why,
+        "quality_delta": round(dq, 4),
+        "cost_delta": round(dc, 4),
+        "latency_delta": round(float(latency["after"]) - float(latency["before"]), 4),
+        "statistically_significant": significant,
+        "practically_tiny": tiny and not practical,
+        "evidence": {"quality": quality, "cost": cost, "latency": latency},
+        "risk": "HIGH" if label == "REGRESSION" else ("MEDIUM" if label == "TRADEOFF" else "LOW"),
+        "recommended_action": label,
+    }
 
 
 def _pareto(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

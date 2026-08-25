@@ -8,7 +8,18 @@ EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace 
 
 It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-Current version: **0.7.0** (beta public API — not 1.0). Competitive status: **PARITY** — see [docs/competitive-results.md](docs/competitive-results.md). This is not a claim that EvalTrim beats every competitor on every metric.
+Current version: **0.9.0** (beta public API — not 1.0). Competitive status: **PARITY** on unreproduced competitor metrics (those stay **UNMEASURED**). This is not a public “9/10 product” claim.
+
+## First run
+
+```bash
+pip install -e ".[dev]"
+evaltrim init
+evaltrim analyze evals.yaml
+evaltrim doctor
+```
+
+Windows, macOS, and Linux all use `pathlib` paths. If an optional extra is missing, commands name the package instead of dumping a traceback.
 
 ## Three layers
 
@@ -104,7 +115,12 @@ Generated from this repo’s demo suite. Not mocked numbers.
 
 Open [docs/images/report.html](docs/images/report.html).
 
-## Measured quality (v0.7.0)
+## Measured quality (v0.9.0)
+
+Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
+No LLM. Embeddings off. Constructed suites — **not** production traffic.
+
+Re-measured after the 0.9 pass (same immutable metadata on coding/customer_support/shopping). See [docs/benchmark.md](docs/benchmark.md).
 
 Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
 No LLM. Embeddings off. Constructed suites — **not** production traffic.

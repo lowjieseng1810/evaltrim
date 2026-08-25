@@ -211,6 +211,8 @@ def run_scale_benchmark(sizes: list[int]) -> list[dict[str, Any]]:
                 "runtime_seconds": round(elapsed, 4),
                 "peak_mib": round(peak / (1024 * 1024), 2),
                 "candidate_pairs": result.candidate_pairs_considered,
+                "simulations_executed": result.timings.get("simulations_executed"),
+                "simulation_cache_entries": result.timings.get("simulation_cache_entries"),
                 "timings": result.timings,
                 "keep": result.summary.keep,
                 "merge": result.summary.merge,

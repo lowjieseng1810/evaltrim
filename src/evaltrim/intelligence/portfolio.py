@@ -111,8 +111,41 @@ def select_portfolio(
         },
         "note": (
             "Portfolio starts greedy (critical witnesses first) then applies a single optional swap. "
-            "Not a globally optimal solver."
+            "Not a globally optimal solver. Do not treat selected sets as mathematically optimal."
         ),
+    }
+
+
+def named_portfolios(
+    suite: TestSuite,
+    result: AnalysisResult,
+    *,
+    max_tests: int | None = None,
+    max_cost: float | None = None,
+    max_time_ms: float | None = None,
+) -> dict[str, Any]:
+    n = len(suite.tests)
+    compact_n = max(1, n // 3) if max_tests is None else min(max_tests, n)
+    compact = select_portfolio(suite, result, max_tests=compact_n, max_cost=max_cost, max_time_ms=max_time_ms)
+    critical_ids = [e.test_id for e in result.evidence if e.is_critical_witness or (e.behavior.critical)]
+    critical = select_portfolio(
+        suite, result, max_tests=max(len(critical_ids), 1), max_cost=max_cost, max_time_ms=max_time_ms
+    )
+    # Prefer members that are critical witnesses if the greedy set drifted.
+    keep_n = max(len(critical_ids), 1)
+    critical["selected"] = sorted(set(critical["selected"]) | set(critical_ids))[:keep_n]
+    total_cost = 0.0
+    for t in suite.tests:
+        stats = t.run_stats
+        total_cost += float(stats.estimated_cost_usd) if stats and stats.estimated_cost_usd else 1.0
+    cost_budget = max_cost if max_cost is not None else max(total_cost / 2.0, 1e-9)
+    cost = select_portfolio(suite, result, max_tests=max_tests or n, max_cost=cost_budget, max_time_ms=max_time_ms)
+    return {
+        "BEST_COMPACT_PORTFOLIO": compact,
+        "BEST_CRITICAL_PORTFOLIO": critical,
+        "BEST_COST_CONSTRAINED_PORTFOLIO": cost,
+        "pareto": pareto_portfolios(suite, result, max_tests=max_tests),
+        "note": "Named portfolios are greedy heuristics with Pareto alternatives, not proven optima.",
     }
 
 

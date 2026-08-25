@@ -10,7 +10,18 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from evaltrim.normalize import char_ngrams, normalize_text
-from evaltrim.similarity import cosine
+
+
+def _cosine(left: dict[str, float], right: dict[str, float]) -> float:
+    keys = set(left) | set(right)
+    if not keys:
+        return 0.0
+    dot = sum(left.get(k, 0.0) * right.get(k, 0.0) for k in keys)
+    na = math.sqrt(sum(v * v for v in left.values()))
+    nb = math.sqrt(sum(v * v for v in right.values()))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
 
 
 def cache_dir() -> Path:
@@ -30,7 +41,7 @@ class SemanticEncoder(ABC):
         raise NotImplementedError
 
     def similarity(self, left: str, right: str) -> float:
-        return cosine(self.encode(left), self.encode(right))
+        return _cosine(self.encode(left), self.encode(right))
 
 
 class HashingNgramEncoder(SemanticEncoder):

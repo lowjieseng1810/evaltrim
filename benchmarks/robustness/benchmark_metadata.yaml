@@ -1,0 +1,18 @@
+# Immutable after 0.9.0 publication. Do not rewrite labels to chase scores.
+schema_version: 1
+immutable: true
+suite: robustness
+expected_redundant_groups: []
+expected_unique_witnesses:
+  - hardneg-store-credit
+  - traj-skip-verify
+  - sec-injection
+expected_critical_cases:
+  - para-refund-a
+  - para-refund-b
+  - hardneg-store-credit
+  - traj-skip-verify
+  - sec-injection
+notes:
+  - Paraphrase and hard-negative quality is asserted in tests/test_v09.py, not by rewriting this file.
+  - Semantic similarity must not independently authorize RETIRE.

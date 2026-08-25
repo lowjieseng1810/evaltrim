@@ -325,6 +325,195 @@ class CostGrader(Grader):
         return GradeResult(grader=self.name, passed=ok, score=1.0 if ok else 0.0, detail=f"${cost} <= ${limit}")
 
 
+def _parse_number(text: str) -> float | None:
+    match = re.search(r"-?\d+(?:\.\d+)?", text.replace(",", ""))
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
+
+def _json_path(data: Any, path: str) -> Any:
+    cur = data
+    raw = path[1:] if path.startswith("$") else path
+    raw = raw.lstrip(".")
+    if not raw:
+        return cur
+    parts = re.findall(r"[^.\[\]]+|\[\d+\]", raw)
+    for part in parts:
+        if part.startswith("[") and part.endswith("]"):
+            idx = int(part[1:-1])
+            if not isinstance(cur, list) or idx >= len(cur):
+                raise KeyError(path)
+            cur = cur[idx]
+        else:
+            if not isinstance(cur, dict) or part not in cur:
+                raise KeyError(path)
+            cur = cur[part]
+    return cur
+
+
+class NumericToleranceGrader(Grader):
+    name = "numeric_tolerance"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        expected = _parse_number(str(spec.params.get("expected") or record.expected or ""))
+        actual = _parse_number(output.text)
+        if expected is None or actual is None:
+            return GradeResult(grader=self.name, passed=None, skipped=True, detail="no numeric values")
+        abs_tol = float(spec.params.get("abs", spec.params.get("abs_tol", 1e-6)))
+        rel_tol = float(spec.params.get("rel", spec.params.get("rel_tol", 0.0)))
+        ok = abs(actual - expected) <= abs_tol + rel_tol * abs(expected)
+        return GradeResult(
+            grader=self.name,
+            passed=ok,
+            score=1.0 if ok else 0.0,
+            detail=f"{actual} vs {expected} (abs={abs_tol}, rel={rel_tol})",
+        )
+
+
+class SetEqualityGrader(Grader):
+    name = "set_equality"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        try:
+            actual = json.loads(output.text)
+        except json.JSONDecodeError:
+            actual = [x.strip() for x in output.text.split(",") if x.strip()]
+        expected = spec.params.get("expected")
+        if expected is None and record.expected:
+            try:
+                expected = json.loads(record.expected)
+            except json.JSONDecodeError:
+                expected = [x.strip() for x in record.expected.split(",") if x.strip()]
+        if not isinstance(actual, list) or not isinstance(expected, list):
+            return GradeResult(grader=self.name, passed=False, score=0.0, detail="expected JSON/list values")
+        ok = set(map(str, actual)) == set(map(str, expected))
+        return GradeResult(grader=self.name, passed=ok, score=1.0 if ok else 0.0, detail="set equality")
+
+
+class JsonPathGrader(Grader):
+    name = "json_path"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        try:
+            data = json.loads(output.text)
+        except json.JSONDecodeError as exc:
+            return GradeResult(grader=self.name, passed=False, score=0.0, detail=str(exc))
+        path = str(spec.params.get("path") or "$")
+        try:
+            value = _json_path(data, path)
+        except (KeyError, ValueError, TypeError):
+            return GradeResult(grader=self.name, passed=False, score=0.0, detail=f"missing path {path}")
+        if "equals" in spec.params:
+            ok = value == spec.params["equals"]
+            return GradeResult(grader=self.name, passed=ok, score=1.0 if ok else 0.0, detail=f"{path}={value!r}")
+        if spec.params.get("exists"):
+            return GradeResult(grader=self.name, passed=True, score=1.0, detail=f"{path} exists")
+        return GradeResult(grader=self.name, passed=True, score=1.0, detail=f"{path}={value!r}")
+
+
+class OrderedSubsequenceGrader(Grader):
+    name = "ordered_subsequence"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        order = [str(x) for x in (spec.params.get("order") or [])]
+        kinds = [s.kind for s in output.trajectory] or [c.name for c in output.tool_calls]
+        pos = 0
+        for item in order:
+            try:
+                pos = kinds.index(item, pos) + 1
+            except ValueError:
+                return GradeResult(grader=self.name, passed=False, score=0.0, detail=f"missing step {item}")
+        return GradeResult(grader=self.name, passed=True, score=1.0, detail="ordered subsequence ok")
+
+
+class ForbiddenToolGrader(Grader):
+    name = "forbidden_tool"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        forbidden = spec.params.get("forbidden") or spec.params.get("tools") or []
+        clone = GraderSpec(type="tool_call", params={"forbidden": forbidden})
+        result = ToolCallGrader().grade(record, output, clone)
+        return result.model_copy(update={"grader": self.name})
+
+
+class RequiredToolGrader(Grader):
+    name = "required_tool"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        required = spec.params.get("required") or spec.params.get("tools") or []
+        clone = GraderSpec(type="tool_call", params={"required": required})
+        result = ToolCallGrader().grade(record, output, clone)
+        return result.model_copy(update={"grader": self.name})
+
+
+class MaxToolCallsGrader(Grader):
+    name = "max_tool_calls"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        limit = int(spec.params.get("max", spec.params.get("n", 8)))
+        n = len(output.tool_calls)
+        ok = n <= limit
+        return GradeResult(grader=self.name, passed=ok, score=1.0 if ok else 0.0, detail=f"{n} <= {limit} tool calls")
+
+
+class MaxTrajectoryLengthGrader(Grader):
+    name = "max_trajectory_length"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        limit = int(spec.params.get("max", spec.params.get("n", 20)))
+        n = len(output.trajectory) or len(output.tool_calls)
+        ok = n <= limit
+        return GradeResult(grader=self.name, passed=ok, score=1.0 if ok else 0.0, detail=f"{n} <= {limit} steps")
+
+
+class StatePredicateGrader(Grader):
+    name = "state_predicate"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        expected = spec.params.get("equals") or spec.params.get("state") or {}
+        actual = {}
+        if isinstance(record.metadata.get("state"), dict):
+            actual.update(record.metadata["state"])
+        if output.trajectory:
+            last = output.trajectory[-1].payload
+            if isinstance(last, dict):
+                actual.update(last)
+        missing = [k for k, v in expected.items() if actual.get(k) != v]
+        ok = not missing
+        return GradeResult(
+            grader=self.name,
+            passed=ok,
+            score=1.0 if ok else 0.0,
+            detail="state ok" if ok else f"state mismatch {missing}",
+        )
+
+
+class LCSTrajectoryGrader(TrajectoryGrader):
+    name = "lcs_trajectory"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        params = {**spec.params, "mode": spec.params.get("mode", "lcs")}
+        result = super().grade(record, output, spec.model_copy(update={"params": params}))
+        return result.model_copy(update={"grader": self.name})
+
+
+class StrictTrajectoryGrader(TrajectoryGrader):
+    name = "strict_trajectory"
+
+    def grade(self, record: EvaluationRecord, output: AgentOutput, spec: GraderSpec) -> GradeResult:
+        params = {**spec.params, "mode": "strict"}
+        result = super().grade(record, output, spec.model_copy(update={"params": params}))
+        return result.model_copy(update={"grader": self.name})
+
+
+class JsonSchemaAliasGrader(JsonSchemaGrader):
+    name = "json_schema"
+
+
 class CustomGrader(Grader):
     name = "custom"
 
@@ -351,17 +540,29 @@ for _cls, _aliases in (
     (ContainsGrader, ()),
     (NotContainsGrader, ()),
     (RegexGrader, ()),
-    (JsonSchemaGrader, ("json_schema",)),
+    (JsonSchemaGrader, ()),
+    (JsonSchemaAliasGrader, ()),
     (SemanticGrader, ()),
     (LLMJudgeGrader, ()),
     (ToolCallGrader, ()),
     (ToolArgsGrader, ()),
     (TrajectoryGrader, ()),
+    (LCSTrajectoryGrader, ()),
+    (StrictTrajectoryGrader, ()),
     (LatencyGrader, ()),
     (TTFTGrader, ()),
     (TokenGrader, ()),
     (CostGrader, ()),
     (CustomGrader, ()),
+    (NumericToleranceGrader, ("numeric",)),
+    (SetEqualityGrader, ("list_equality",)),
+    (JsonPathGrader, ()),
+    (OrderedSubsequenceGrader, ()),
+    (ForbiddenToolGrader, ("forbidden_action",)),
+    (RequiredToolGrader, ("required_action",)),
+    (MaxToolCallsGrader, ()),
+    (MaxTrajectoryLengthGrader, ()),
+    (StatePredicateGrader, ()),
 ):
     register_grader(_cls, aliases=_aliases)
 

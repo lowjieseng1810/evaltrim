@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 — 2026-08-25
+
+Internal maturity pass (engineering target, not a public 9/10 score).
+
+- Broader graders: numeric tolerance, set equality, JSON path, subsequence, required/forbidden tools, max steps, state predicates, LCS/strict aliases; `register_grader` documented
+- Three-tier semantic (lexical / local hashing / optional encoder) with per-pair confidence; hard-negative clause penalty
+- `evaltrim replay --compare` human-readable trajectory diffs (terminal/JSON/Markdown)
+- Experiment verdicts RECOMMENDED / TRADEOFF / REGRESSION / INCONCLUSIVE; reproducible manifests; smoke/dry-run planning
+- Provider-neutral red-team families expanded; curated local probes with detection/FP/reproducibility
+- Declarative YAML scenarios (personas, state, branch, tool, assert)
+- Local sandbox: env allowlist, timeouts, output caps, escape tests; labeled LOCAL SANDBOX not a VM
+- Counterfactual equivalence-class cache (same safety math)
+- Compact WHAT/WHY/EVIDENCE/RISK/ACTION reports; `--verbose` proof nodes with stable evidence IDs
+- Visible `ValueWeights`; named portfolios BEST COMPACT / CRITICAL / COST-CONSTRAINED
+- `evaltrim doctor` checks sandbox, config, optional deps, embeddings, GitHub
+- Robustness benchmark fixture (immutable metadata)
+
 ## 0.7.0 — 2026-08-25
 
 Competitive parity pass: measure, close gaps, re-measure. No “beats every competitor” claim.

@@ -8,7 +8,7 @@ from evaltrim.intelligence.graph import behavior_graph
 from evaltrim.intelligence.health import suite_health
 from evaltrim.intelligence.infogain import information_gain
 from evaltrim.intelligence.mutation import mutation_score
-from evaltrim.intelligence.portfolio import select_portfolio
+from evaltrim.intelligence.portfolio import named_portfolios, pareto_portfolios, select_portfolio
 
 __all__ = [
     "behavior_graph",
@@ -20,6 +20,8 @@ __all__ = [
     "information_gain",
     "ledger_for",
     "mutation_score",
+    "named_portfolios",
+    "pareto_portfolios",
     "select_portfolio",
     "suite_health",
 ]

@@ -184,6 +184,7 @@ def analyze(
     format: str = typer.Option("markdown", "--format", help="markdown|json|github|table|html"),
     output: Path | None = typer.Option(None, "--output", "-o", help="Write report to this path."),
     strict: bool = typer.Option(False, "--strict", help="Fail on policy violations."),
+    verbose: bool = typer.Option(False, "--verbose", help="Include full proof nodes for every test."),
 ) -> None:
     """Map coverage, redundancy, unique witnesses, and recommendations."""
     try:
@@ -202,7 +203,7 @@ def analyze(
         _print_table(result)
         text = None
     else:
-        text = render_markdown(result)
+        text = render_markdown(result, verbose=verbose)
     if text is not None:
         _write(text, output)
 
@@ -220,7 +221,7 @@ def report(
     output: Path | None = typer.Option(None, "--output", "-o"),
 ) -> None:
     """Generate a polished analysis report (alias of analyze for scripts)."""
-    analyze(suite=suite, format=format, output=output, strict=False)
+    analyze(suite=suite, format=format, output=output, strict=False, verbose=False)
 
 
 @app.command("simulate-remove")
@@ -437,11 +438,36 @@ def run(
 
 @app.command()
 def replay(
-    recording: Path = typer.Argument(..., help="Recording JSON from evaltrim run --record"),
-    suite: Path = typer.Argument(..., help="Suite used to re-grade recorded outputs"),
+    paths: list[Path] = typer.Argument(None, help="Recording+suite, or with --compare: BASELINE CANDIDATE"),
+    compare: bool = typer.Option(
+        False,
+        "--compare",
+        help="Diff two trajectory files instead of re-grading a recording.",
+    ),
     format: str = typer.Option("markdown", "--format"),
+    verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Re-grade a saved recording without calling the agent."""
+    """Re-grade a saved recording, or compare two trajectories.
+
+    evaltrim replay RECORDING.json SUITE.yaml
+    evaltrim replay --compare BASELINE CANDIDATE
+    """
+    if compare:
+        if not paths or len(paths) != 2:
+            console.print("[red]Usage: evaltrim replay --compare BASELINE CANDIDATE[/red]")
+            raise typer.Exit(2)
+        from evaltrim.trajectory_diff import compare_trajectories, load_trajectory_file, render_trajectory_diff
+
+        payload = compare_trajectories(load_trajectory_file(paths[0]), load_trajectory_file(paths[1]))
+        if not verbose:
+            payload = {k: payload[k] for k in payload if k != "ops"} | {"ops": payload["ops"][:40]}
+        text = render_trajectory_diff(payload, fmt="json" if format == "json" else "markdown")
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
+        return
+    if not paths or len(paths) != 2:
+        console.print("[red]Usage: evaltrim replay RECORDING.json SUITE.yaml[/red]")
+        raise typer.Exit(2)
+    recording, suite = paths[0], paths[1]
     try:
         loaded = _load(suite)
         records = [EvaluationRecord.from_test_case(t) for t in loaded.tests]
@@ -454,6 +480,11 @@ def replay(
         sys.stdout.write(
             json.dumps(
                 {
+                    "what": "replay",
+                    "why": "re-grade recorded outputs without calling the agent",
+                    "evidence": {"cases": len(batch.cases), "passed": sum(1 for c in batch.cases if c.passed)},
+                    "risk": "LOW",
+                    "recommended_action": "INSPECT",
                     "cases": len(batch.cases),
                     "passed": sum(1 for c in batch.cases if c.passed),
                     "summary": batch.summary,
@@ -647,15 +678,17 @@ def portfolio(
     """Greedy evaluation subset under budget. Prefers unique critical witnesses."""
     import json
 
-    from evaltrim.intelligence.portfolio import select_portfolio
+    from evaltrim.intelligence.portfolio import named_portfolios
 
     try:
         loaded = _load(suite)
         result = analyze_suite(loaded)
-        payload = select_portfolio(loaded, result, max_tests=max_tests, max_cost=max_cost, max_time_ms=max_time_ms)
-        from evaltrim.intelligence.portfolio import pareto_portfolios
-
-        payload = {**payload, "pareto": pareto_portfolios(loaded, result, max_tests=max_tests)}
+        payload = named_portfolios(loaded, result, max_tests=max_tests, max_cost=max_cost, max_time_ms=max_time_ms)
+        payload = {
+            **payload,
+            "selected": payload["BEST_COMPACT_PORTFOLIO"]["selected"],
+            "pareto": payload["pareto"],
+        }
     except EvalTrimError as exc:
         _fail(exc)
     if format == "json":
@@ -936,6 +969,21 @@ def cluster(
     _emit_json("cluster", payload)
 
 
+@app.command()
+def scenario(
+    path: Path = typer.Argument(..., help="Scenario YAML"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Replay a declarative multi-turn scenario (echo adapter, deterministic)."""
+    from evaltrim.scenarios import load_scenario, replay_scenario
+
+    try:
+        payload = replay_scenario(load_scenario(path))
+    except EvalTrimError as exc:
+        _fail(exc)
+    _emit_json("scenario", payload)
+
+
 @app.command("export-suite")
 def export_suite_cmd(
     suite: Path = typer.Argument(...),
@@ -956,13 +1004,19 @@ def export_suite_cmd(
 def experiment_matrix_cmd(
     source: Path = typer.Argument(..., help="JSON list of runs with cases and dimensions"),
     format: str = typer.Option("json", "--format"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    smoke: bool = typer.Option(False, "--smoke"),
 ) -> None:
     """Pareto comparison across recorded experiment runs."""
     import json
 
-    from evaltrim.experiments import experiment_matrix
+    from evaltrim.experiments import experiment_matrix, plan_experiment
 
     data = json.loads(source.read_text(encoding="utf-8"))
+    if dry_run or smoke:
+        axes = data.get("dimensions") or data.get("axes") or {"model": ["default"]}
+        _emit_json("experiment-matrix", plan_experiment(axes, dry_run=dry_run, smoke=smoke))
+        return
     runs = data["runs"] if isinstance(data, dict) and "runs" in data else data
     _emit_json("experiment-matrix", experiment_matrix(runs))
 

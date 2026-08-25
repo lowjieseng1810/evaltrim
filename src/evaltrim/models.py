@@ -253,8 +253,40 @@ class RedundancyWeights(BaseModel):
         return self
 
 
+class ValueWeights(BaseModel):
+    """Visible, user-overridable components of the heuristic value score. Must sum to 1.0."""
+
+    uniqueness: float = 0.18
+    criticality: float = 0.18
+    information_gain: float = 0.12
+    historical_failures: float = 0.12
+    requirement_coverage: float = 0.10
+    boundary: float = 0.10
+    inverse_cost: float = 0.08
+    inverse_flakiness: float = 0.07
+    oracle_confidence: float = 0.05
+
+    @model_validator(mode="after")
+    def _sum_to_one(self) -> ValueWeights:
+        total = (
+            self.uniqueness
+            + self.criticality
+            + self.information_gain
+            + self.historical_failures
+            + self.requirement_coverage
+            + self.boundary
+            + self.inverse_cost
+            + self.inverse_flakiness
+            + self.oracle_confidence
+        )
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError(f"value weights must sum to 1.0, got {total}")
+        return self
+
+
 class AnalysisConfig(BaseModel):
     weights: RedundancyWeights = Field(default_factory=RedundancyWeights)
+    value_weights: ValueWeights = Field(default_factory=ValueWeights)
     redundancy_threshold: float = 0.80
     merge_threshold: float = 0.90
     stale_days: int = 180
@@ -404,6 +436,7 @@ class EvidenceLedger(BaseModel):
     proof: list[dict[str, Any]] = Field(default_factory=list)
     information_gain: float | None = None
     failure_detection_value: float | None = None
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -432,6 +465,7 @@ class TestEvidence(BaseModel):
     conflict: bool
     lifecycle: str = "ACTIVE"
     stale_status: str = "ACTIVE"
+    value_components: dict[str, float] = Field(default_factory=dict)
 
 
 class RemovalSimulation(BaseModel):

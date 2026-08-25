@@ -22,7 +22,7 @@ from evaltrim.models import (
 )
 
 # Bump when incremental math changes so persisted analysis caches invalidate.
-SIMULATION_VERSION = "0.6-index-2"
+SIMULATION_VERSION = "0.9-equiv-1"
 
 
 @dataclass
@@ -43,6 +43,7 @@ class RemovalIndex:
     requirement_holders: dict[str, list[str]]
     unique_before: int
     tests_with_unique: int
+    critical_test_ids: set[str]
 
     @staticmethod
     def build(
@@ -87,6 +88,7 @@ class RemovalIndex:
             requirement_holders=dict(req_holders),
             unique_before=sum(1 for atoms in unique.values() if atoms),
             tests_with_unique=sum(1 for atoms in unique.values() if atoms),
+            critical_test_ids={t.id for t, b in zip(tests, behaviors, strict=True) if b.critical},
         )
 
 
@@ -237,8 +239,8 @@ def _after_coverage(
         covered_critical_n = critical_atoms - len(uncovered_critical)
         critical_coverage = covered_critical_n / critical_atoms if critical_atoms else 1.0
     else:
-        remaining_crit = any(b.critical and t.id != test_id for t, b in zip(index.tests, index.behaviors, strict=True))
-        any_crit = any(b.critical for b in index.behaviors)
+        remaining_crit = any(tid != test_id for tid in index.critical_test_ids)
+        any_crit = bool(index.critical_test_ids)
         critical_coverage = 1.0 if remaining_crit or not any_crit else 0.0
         uncovered_critical = [] if critical_coverage == 1.0 else ["flag:critical"]
         critical_atoms = 1 if any_crit else 0
@@ -255,6 +257,39 @@ def _after_coverage(
         uncovered_behaviors=sorted(lost_set),
         critical_by_name={name: name not in uncovered_critical for name in declared_norm} if declared_norm else {},
     )
+
+
+def simulate_cached(
+    index: RemovalIndex,
+    test_id: str,
+    cache: dict[tuple, RemovalSimulation],
+) -> RemovalSimulation:
+    """Reuse exact counterfactual results across equivalent coverage signatures.
+
+    Safety math is unchanged: cache key includes unique atoms, sole critical
+    holdings, unique requirements, historical-failure flag, and low-confidence flag.
+    """
+    sig = _simulation_signature(index, test_id)
+    hit = cache.get(sig)
+    if hit is None:
+        hit = simulate_from_index(index, test_id)
+        cache[sig] = hit
+        return hit
+    if hit.test_id == test_id:
+        return hit
+    return hit.model_copy(update={"test_id": test_id})
+
+
+def _simulation_signature(index: RemovalIndex, test_id: str) -> tuple:
+    lost_atoms = tuple(index.unique.get(test_id, []))
+    lost_critical = tuple(
+        name for name, holders in index.critical_holders.items() if len(holders) == 1 and test_id in holders
+    )
+    lost_reqs = tuple(req_id for req_id, holders in index.requirement_holders.items() if holders == [test_id])
+    target = index.by_id[test_id]
+    hist = bool(target.run_stats and target.run_stats.failures)
+    low = bool(target.behavior and target.behavior.source == "heuristic" and target.behavior.confidence < 0.5)
+    return (lost_atoms, lost_critical, lost_reqs, hist, low)
 
 
 def _human(atom: str) -> str:

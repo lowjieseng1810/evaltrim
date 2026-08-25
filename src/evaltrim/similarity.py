@@ -9,6 +9,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import TypedDict
 
+from evaltrim.embeddings import HashingNgramEncoder
 from evaltrim.models import Behavior, RedundancyWeights, RunStats, TestCase
 from evaltrim.normalize import char_ngrams, extract_amounts, normalize_text
 
@@ -22,6 +23,36 @@ class PairScore(TypedDict):
     shared: list[str]
     unique_left: list[str]
     unique_right: list[str]
+    semantic_confidence: float
+    behavior_confidence: float
+    combined_confidence: float
+    semantic_tier: str
+
+
+_EXCEPTION_MARKERS = {
+    "but",
+    "however",
+    "already",
+    "instead",
+    "except",
+    "unless",
+    "never",
+    "credit",
+}
+
+
+def _exception_penalty(left: str, right: str) -> float:
+    """Down-weight pairs that share a request but add a contradicting clause."""
+    a = set(tokenize_normalized(left)) | set(tokenize(left))
+    b = set(tokenize_normalized(right)) | set(tokenize(right))
+    left_x = bool(a & _EXCEPTION_MARKERS)
+    right_x = bool(b & _EXCEPTION_MARKERS)
+    if left_x != right_x:
+        return 0.72
+    extra = (a - b) | (b - a)
+    if extra & {"credit", "already", "instead"}:
+        return 0.70
+    return 1.0
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9_$]+")
@@ -172,8 +203,9 @@ class SimilarityEngine:
         self._index = {t.id: i for i, t in enumerate(tests)}
         self._norm_tokens = [tokenize_normalized(t.input) for t in tests]
         self._tf_vecs = [_tf_vector(toks) for toks in self._norm_tokens]
+        self._tier2 = HashingNgramEncoder(dims=128)
 
-    def _semantic(self, i: int, j: int) -> float:
+    def _lexical(self, i: int, j: int) -> float:
         left, right = self.tests[i].input, self.tests[j].input
         n_left = self._norm_tokens[i]
         n_right = self._norm_tokens[j]
@@ -203,18 +235,29 @@ class SimilarityEngine:
         if norm_eq:
             lexical = max(lexical, 0.97)
         lexical = min(1.0, 0.82 * lexical + 0.18 * (amounts if amounts != 0.5 else lexical))
+        penalty = _exception_penalty(left, right)
+        if penalty < 1.0:
+            # Do not let rare-token boosts override a contradicting clause.
+            lexical = min(lexical * penalty, 0.78)
+        return lexical
+
+    def _semantic(self, i: int, j: int) -> tuple[float, str, float]:
+        """Return (score, tier_used, semantic_confidence). Tier 3 is optional encoder."""
+        left, right = self.tests[i].input, self.tests[j].input
+        tier1 = self._lexical(i, j)
+        tier2 = float(self._tier2.similarity(left, right))
+        blended = min(1.0, 0.86 * tier1 + 0.14 * tier2)
+        agreement = 1.0 - min(1.0, abs(tier1 - tier2))
         if self.encoder is None:
-            return lexical
+            return blended, "tier2_local", round(0.55 + 0.45 * agreement, 4)
         encoded = float(self.encoder.similarity(left, right))  # type: ignore[attr-defined]
-        return min(1.0, 0.70 * lexical + 0.30 * encoded)
+        mixed = min(1.0, 0.62 * blended + 0.38 * encoded)
+        return mixed, "tier3_optional", round(0.60 + 0.40 * agreement, 4)
 
     def pair_score(self, left_id: str, right_id: str) -> PairScore:
         i, j = self._index[left_id], self._index[right_id]
         key = content_hash("pair", *sorted((left_id, right_id)), self.tests[i].input, self.tests[j].input)
-        if key in self.cache:
-            # Cache stores the composite semantic channel only as a shortcut for embeddings.
-            pass
-        semantic = self._semantic(i, j)
+        semantic, tier, sem_conf = self._semantic(i, j)
         expected = self.expected_index.pairwise(i, j)
         exp_l, exp_r = self.tests[i].expected, self.tests[j].expected
         if normalize_text(exp_l) == normalize_text(exp_r) and normalize_text(exp_l):
@@ -229,6 +272,8 @@ class SimilarityEngine:
             + self.weights.expected * expected
             + self.weights.historical * hist
         )
+        behavior_conf = round(0.5 * overlap + 0.5 * (1.0 if not uniq_l and not uniq_r else 0.35), 4)
+        combined = round(0.35 * sem_conf + 0.65 * behavior_conf, 4)
         rounded = round(float(score), 6)
         self.cache[key] = rounded
         return {
@@ -240,4 +285,8 @@ class SimilarityEngine:
             "shared": shared,
             "unique_left": uniq_l,
             "unique_right": uniq_r,
+            "semantic_confidence": sem_conf,
+            "behavior_confidence": behavior_conf,
+            "combined_confidence": combined,
+            "semantic_tier": tier,
         }

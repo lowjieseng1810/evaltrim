@@ -2,16 +2,54 @@
 
 from __future__ import annotations
 
+from evaltrim.intelligence.evidence import render_evidence
 from evaltrim.models import (
     AnalysisResult,
     MaintenanceReport,
+    Recommendation,
     RecommendationState,
     RemovalSimulation,
     Verdict,
 )
 
 
-def render_markdown(result: AnalysisResult) -> str:
+def decision_card(rec: Recommendation, *, verbose: bool = False) -> list[str]:
+    evd = rec.evidence
+    why = rec.reasons[0] if rec.reasons else rec.state.value
+    overlap = evd.behavior_overlap if evd else None
+    uniq = evd.unique_witnesses_lost if evd else 0
+    crit = evd.critical_coverage_lost if evd else 0
+    hist = evd.historical_failure_contribution if evd else 0
+    drop = evd.counterfactual_coverage_loss if evd else 0
+    if rec.state == RecommendationState.KEEP and uniq:
+        risk = "HIGH"
+        action = "KEEP"
+    elif rec.state == RecommendationState.RETIRE:
+        risk = "LOW"
+        action = "REVIEW / RETIRE"
+    elif rec.state == RecommendationState.MERGE:
+        risk = "MEDIUM"
+        action = "REVIEW / MERGE"
+    else:
+        risk = "MEDIUM"
+        action = rec.state.value
+    lines = [
+        f"### {rec.state.value} `{rec.test_id}`",
+        f"Why: {why}",
+        (
+            f"Evidence: behavior overlap {overlap} unique witnesses lost {uniq} "
+            f"critical coverage loss {crit} historical failure contribution {hist} "
+            f"counterfactual loss {drop}"
+        ),
+        f"Risk: {risk}",
+        f"Action: {action}",
+    ]
+    if verbose and evd:
+        lines.append(render_evidence(evd, fmt="markdown"))
+    return lines
+
+
+def render_markdown(result: AnalysisResult, *, verbose: bool = False) -> str:
     s = result.summary
     c = result.coverage
     lines = [
@@ -88,21 +126,14 @@ def render_markdown(result: AnalysisResult) -> str:
             else:
                 lines.append(f"`{row.requirement_id}` {row.status} covered by: {len(row.covered_by)} tests")
     lines += ["", "## Recommendations", ""]
-    for rec in result.recommendations:
-        lines.append(f"### `{rec.test_id}` — {rec.state.value}")
-        lines.append(f"Value score (heuristic): {rec.value_score:.1f}/100 · confidence {rec.confidence:.2f}")
-        for reason in rec.reasons:
-            lines.append(f"- {reason}")
-        if rec.evidence:
-            evd = rec.evidence
-            lines.append(
-                f"- Evidence: semantic_similarity={evd.semantic_similarity} "
-                f"behavior_overlap={evd.behavior_overlap} unique_witnesses_lost={evd.unique_witnesses_lost} "
-                f"critical_coverage_lost={evd.critical_coverage_lost} "
-                f"requirement_coverage_lost={evd.requirement_coverage_lost} "
-                f"historical_failure_contribution={evd.historical_failure_contribution} "
-                f"counterfactual_coverage_loss={evd.counterfactual_coverage_loss}"
-            )
+    recs = result.recommendations if verbose else result.recommendations[:12]
+    for rec in recs:
+        lines.extend(decision_card(rec, verbose=verbose))
+        lines.append("")
+    if not verbose and len(result.recommendations) > 12:
+        lines.append(
+            f"Showing 12 of {len(result.recommendations)} recommendations. Pass --verbose for the full proof graph."
+        )
         lines.append("")
     lines += [
         "## Redundant Pairs",

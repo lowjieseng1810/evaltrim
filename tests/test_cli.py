@@ -11,7 +11,7 @@ DEMO = Path("examples/demo_suite.yaml")
 def test_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "0.7.0" in result.stdout
+    assert "0.9.0" in result.stdout
 
 
 def test_validate_demo():
