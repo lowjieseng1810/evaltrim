@@ -248,7 +248,9 @@ class SimilarityEngine:
         if self._tier2 is None and self.encoder is None:
             return tier1, "tier1_lexical", 0.7
         if self._tier2 is None:
-            encoded = float(self.encoder.similarity(left, right))  # type: ignore[attr-defined]
+            enc = self.encoder
+            assert enc is not None
+            encoded = float(enc.similarity(left, right))  # type: ignore[attr-defined]
             return min(1.0, 0.70 * tier1 + 0.30 * encoded), "tier3_optional", 0.75
         tier2 = float(self._tier2.similarity(left, right))
         blended = min(1.0, 0.86 * tier1 + 0.14 * tier2)
