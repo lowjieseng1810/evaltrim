@@ -77,17 +77,40 @@ def select_portfolio(
         used_time = next_time
 
     leftover = [tid for tid in ranked if tid not in selected]
+    # Lightweight 1-opt: swap the lowest-scoring optional test with a leftover if it scores higher.
+    optional = [tid for tid in selected if not (wit_by[tid].unique_critical or ev_by[tid].is_critical_witness)]
+    if leftover and optional:
+        weakest = min(optional, key=lambda tid: (score(tid), tid))
+        best = leftover[0]
+        if score(best) > score(weakest):
+            alt_cost = used_cost - cost(weakest) + cost(best)
+            alt_time = used_time - latency(weakest) + latency(best)
+            ok_cost = max_cost is None or alt_cost <= max_cost
+            ok_time = max_time_ms is None or alt_time <= max_time_ms
+            if ok_cost and ok_time:
+                selected = [tid if tid != weakest else best for tid in selected]
+                used_cost, used_time = alt_cost, alt_time
     alt = list(selected)
-    if leftover and len(alt) >= 2:
-        alt = alt[:-1] + leftover[:1]
+    if leftover:
+        extras = [tid for tid in leftover if tid not in selected]
+        if extras and len(alt) >= 2:
+            alt = alt[:-1] + extras[:1]
     return {
         "selected": selected,
         "alternatives": [alt] if alt != selected else [],
         "used_cost": round(used_cost, 4),
         "used_time_ms": round(used_time, 4),
         "constraints": {"max_tests": max_tests, "max_cost": max_cost, "max_time_ms": max_time_ms},
+        "evidence": {
+            tid: {
+                "score": score(tid),
+                "critical_witness": bool(wit_by[tid].unique_critical or ev_by[tid].is_critical_witness),
+                "unique_atoms": list(wit_by[tid].unique_atoms),
+            }
+            for tid in selected
+        },
         "note": (
-            "Portfolio selection is a greedy heuristic that prefers unique critical witnesses. "
-            "Near-tie alternatives are swaps of the last optional test, not a second solver."
+            "Portfolio starts greedy (critical witnesses first) then applies a single optional swap. "
+            "Not a globally optimal solver."
         ),
     }

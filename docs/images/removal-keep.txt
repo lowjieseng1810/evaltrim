@@ -1,0 +1,23 @@
+# Removal simulation: `privacy-delete`
+
+## BEFORE
+Tests: 12
+Behavior coverage: 100.0%
+Critical coverage: 100.0%
+
+## AFTER removing `privacy-delete`
+Tests: 11
+Behavior coverage: 100.0% -> 87.5%
+Critical coverage: 100.0% -> 80.0%
+
+Verdict: **KEEP**
+
+Reason: Removal reduces critical behavior coverage.
+- Removal reduces critical behavior coverage.
+- Lost critical behaviors: destructive_action
+
+Lost atoms:
+
+- `condition:destructive`
+- `domain:privacy`
+- `state:unauthenticated`

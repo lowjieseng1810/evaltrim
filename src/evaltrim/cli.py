@@ -356,6 +356,7 @@ def _benchmark_markdown(payload: dict) -> str:
 def check(
     suite: Path = typer.Argument(..., help="Suite to analyze against policy."),
     config: Path | None = typer.Option(None, "--config", help="evaltrim.yaml path."),
+    format: str = typer.Option("markdown", "--format"),
 ) -> None:
     """Apply policy-as-code (exit 3 on violation). Exit codes: 0 pass, 2 invalid, 3 policy, 4 internal."""
     try:
@@ -369,6 +370,11 @@ def check(
         _fail(exc)
     if problems:
         _fail(StrictModeError("Policy check failed:\n- " + "\n- ".join(problems)))
+    if format == "json":
+        import json
+
+        sys.stdout.write(json.dumps({"ok": True, "problems": []}, indent=2) + "\n")
+        return
     console.print("[green]Policy check passed[/green]")
 
 
@@ -387,7 +393,12 @@ def run(
     """Run graders against a local agent adapter. Default adapter echoes expected (offline)."""
     try:
         loaded = _load(suite)
-        adapter = resolve_adapter(agent, command.split() if command else None)
+        cmd = None
+        if command:
+            import shlex
+
+            cmd = shlex.split(command)
+        adapter = resolve_adapter(agent, cmd)
         batch = run_suite(loaded, adapter=adapter, repeats=repeats, workers=workers, dry_run=dry_run, smoke=smoke)
     except EvalTrimError as exc:
         _fail(exc)
@@ -422,6 +433,7 @@ def run(
 def replay(
     recording: Path = typer.Argument(..., help="Recording JSON from evaltrim run --record"),
     suite: Path = typer.Argument(..., help="Suite used to re-grade recorded outputs"),
+    format: str = typer.Option("markdown", "--format"),
 ) -> None:
     """Re-grade a saved recording without calling the agent."""
     try:
@@ -430,6 +442,21 @@ def replay(
         batch = replay_recording(recording, records)
     except EvalTrimError as exc:
         _fail(exc)
+    if format == "json":
+        import json
+
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "cases": len(batch.cases),
+                    "passed": sum(1 for c in batch.cases if c.passed),
+                    "summary": batch.summary,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        return
     console.print(f"Replayed {len(batch.cases)} cases from {recording}")
     passed = sum(1 for c in batch.cases if c.passed)
     console.print(f"Passed: {passed}/{len(batch.cases)}")
@@ -733,6 +760,141 @@ def flake_report_cmd(
     except EvalTrimError as exc:
         _fail(exc)
     sys.stdout.write(json.dumps({"tests": rows, "note": "Flaky tests are never auto-deleted."}, indent=2) + "\n")
+
+
+@app.command()
+def status(
+    suite: Path = typer.Argument(..., help="Suite YAML/JSON"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Project status for humans and coding agents."""
+    import json
+
+    from evaltrim.status import project_status
+
+    try:
+        payload = project_status(_load(suite))
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print(f"{payload['project']}: {payload['suite_size']} tests")
+    console.print(str(payload["recommendations"]))
+    console.print(f"Critical coverage: {payload['critical_coverage']}")
+    console.print(f"Health: {payload['suite_health']}")
+
+
+@app.command()
+def explain(
+    test_id: str = typer.Argument(...),
+    suite: Path = typer.Option(..., "--suite", help="Suite YAML/JSON"),
+    format: str = typer.Option("markdown", "--format"),
+) -> None:
+    """Explain a recommendation from stored evidence."""
+    import json
+
+    from evaltrim.explain import explain_test
+
+    try:
+        payload = explain_test(_load(suite), test_id)
+    except EvalTrimError as exc:
+        _fail(exc)
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print(payload["summary"])
+    console.print(str(payload["evidence"]))
+
+
+@app.command()
+def gate(
+    suite: Path = typer.Argument(...),
+    changed: list[str] | None = typer.Option(None, "--changed", help="Changed paths"),
+    fast: bool = typer.Option(True, "--fast/--no-fast"),
+    strict: bool = typer.Option(False, "--strict"),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Lightweight pre-commit check. Does not run the full agent suite."""
+    import json
+
+    from evaltrim.gate import gate as run_gate
+
+    try:
+        payload = run_gate(_load(suite), changed_paths=changed or [], repo=Path("."), fast=fast, strict=strict)
+    except EvalTrimError as exc:
+        _fail(exc)
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+
+
+@app.command()
+def doctor(format: str = typer.Option("json", "--format")) -> None:
+    """Check local environment. PASS / WARN / FAIL."""
+    import json
+
+    from evaltrim.doctor import doctor as run_doctor
+
+    payload = run_doctor()
+    if format == "json":
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    console.print(f"Overall: {payload['overall']}")
+    for check in payload["checks"]:
+        console.print(f"{check['status']:4} {check['name']}: {check['detail']}")
+    if payload["overall"] == "FAIL":
+        raise typer.Exit(1)
+
+
+@app.command()
+def experiment(
+    baseline: Path = typer.Argument(...),
+    current: Path = typer.Argument(...),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Compare recorded experiment runs (model/prompt/tool/baseline)."""
+    import json
+
+    from evaltrim.experiments import compare_experiments
+
+    def _cases(path: Path) -> list:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "cases" in data:
+            return data["cases"]
+        return data if isinstance(data, list) else [data]
+
+    try:
+        payload = compare_experiments(_cases(baseline), _cases(current))
+    except EvalTrimError as exc:
+        _fail(exc)
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+
+
+@app.command()
+def regression(
+    baseline: Path = typer.Argument(...),
+    current: Path = typer.Argument(...),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Alias for compare-runs (recorded agent outputs)."""
+    compare_runs_cmd(baseline=baseline, current=current, format=format)
+
+
+@app.command()
+def flaky(
+    suite: Path = typer.Argument(...),
+    format: str = typer.Option("json", "--format"),
+) -> None:
+    """Alias for flake-report."""
+    flake_report_cmd(suite=suite, format=format)
+
+
+@app.command("store-reset")
+def store_reset() -> None:
+    """Delete the local SQLite store. Irreversible."""
+    from evaltrim.store import reset_store
+
+    dest = reset_store()
+    console.print(f"Reset {dest}")
 
 
 if __name__ == "__main__":

@@ -1,126 +1,162 @@
 # EvalTrim
 
-## The Evaluation Control Plane for AI Agents
+> The Evaluation Control Plane for AI Agents.
 
-> Run. Replay. Compare. Understand. Optimize.
+Run. Replay. Compare. Understand. Optimize. Maintain.
 
-EvalTrim is a local-first CLI that does three jobs together:
+EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace your agent runtime or a generic eval harness. It sits beside them and answers: which tests are unique, which are redundant, what a removal would break, and what to run after a change.
 
-1. **Evaluation** — run graders against a local agent adapter, record/replay, snapshots
-2. **Regression Control** — compare runs and suites, classify drift *likely sources*, watch files, select impacted tests
-3. **Evaluation Intelligence** — behavior graph, unique witnesses, counterfactual removal, suite health, evaluation debt, portfolio selection
+It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-> EvalTrim does not only evaluate your agent. It evaluates and optimizes the evaluation system itself.
+Current version: **0.6.0** (beta public API — not 1.0).
 
-It never deletes tests. Recommendations are KEEP / MERGE / RETIRE / REVIEW / ADD_CANDIDATE with a serializable evidence ledger.
+## Three layers
 
-**Not included (deferred):** IDE plugins, full MCP, self-healing, automatic code repair, canary/rollback, hosted tracing, SaaS dashboards.
+1. **Evaluation** — run graders against a local adapter, record, replay, experiment comparison.
+2. **Regression Control** — compare recorded runs and suite snapshots, classify likely drift sources, watch files, select impacted tests, pre-commit `gate`.
+3. **Evaluation Intelligence** — behavior graph, unique witnesses, counterfactual removal, suite health, evaluation debt, portfolio selection, explanations for coding agents.
 
-Current version: **0.4.0**
+EvalTrim does not only evaluate the agent. It evaluates and maintains the evaluation system itself.
 
-## Quick start
+## What makes it different
+
+These are complementary to Promptfoo, LangSmith, Braintrust, and similar tools — not a claim of inventing evaluation:
+
+- **Behavior graph** — tests as coverage over normalized behavior atoms.
+- **Unique witnesses** — the only remaining test for a behavior, boundary, requirement, or failure family.
+- **Counterfactual removal** — simulate deleting a test *before* anyone deletes it.
+- **Suite health** and **evaluation debt** — heuristic diagnostics, not scores you can game.
+- **Evidence ledger** — every recommendation carries similarity, overlap, witness loss, and removal verdict.
+- **Portfolio optimization** — a explainable greedy + 1-opt subset under cost / time / count budgets.
+
+Semantic similarity may **create candidates**. It does **not** independently authorize `RETIRE`.
+
+## 30-second workflow
 
 ```bash
-pip install -e ".[dev]"
-evaltrim analyze examples/demo_suite.yaml
-evaltrim run examples/demo_suite.yaml --agent echo-expected --dry-run
-evaltrim health examples/demo_suite.yaml
-evaltrim maintain examples/demo_suite.yaml
+git clone <this-repo>
+cd evaltrim
+python3 -m pip install -e ".[dev]"
+evaltrim init evals.yaml
+evaltrim analyze evals.yaml
+evaltrim health evals.yaml --format json
+evaltrim regression examples/demo_suite.yaml examples/demo_suite.yaml --format json
+evaltrim maintain evals.yaml
+evaltrim explain privacy-delete --suite examples/demo_suite.yaml
+evaltrim doctor
 ```
 
-v0.1/v0.2 commands still work: `validate`, `report`, `simulate-remove`, `benchmark`, `check`, `import-jsonl`, `snapshot`, `compare`, `replay`.
+Use `examples/demo_suite.yaml` if you want a populated suite immediately.
 
-New in v0.3/v0.4: `watch`, `impacted-tests`, `ingest-traces`, `compare-runs`, `ingest-failure`, `flake-report`, `health`, `debt`, `portfolio`.
+## Semantic matching (honest)
 
-## Distinctive capability
+| Mode | How to enable | Network |
+| --- | --- | --- |
+| **DEFAULT** | nothing | none — normalized tokens, n-grams, rare-token weights, behavior overlap, unique witnesses, counterfactual removal |
+| **OPTIONAL EMBEDDING** | `EVALTRIM_EMBEDDINGS=1` or `config.embeddings_enabled` | none — local hashing encoder (no model download) |
+| **OPTIONAL LLM** | `EVALTRIM_LLM=1` / `config.llm_enabled` plus a provider you configure | only then |
 
-Semantic retrieval may **create candidates**. It does **not** independently authorize RETIRE. Final safety still depends on behavior overlap, unique witnesses, criticality, boundaries, requirements, counterfactual removal, oracle conflict, and historical failures.
+The default merge bar is **not** lowered globally. Hard negatives that share vocabulary but differ in behavior stay unmerged (refund vs refund + store credit).
+
+## Agent-native CLI
+
+Every important command accepts `--format json` with stable field names:
+
+`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `gate` · `doctor` · `experiment`
+
+Exit codes: `0` ok · `2` invalid/missing input · `3` policy/strict · `4` internal.
+
+Optional tiny MCP-style adapter (`evaltrim.mcp_adapter.dispatch`): `get_status`, `impacted_tests`, `explain`, `regression_summary`, `suggest_maintenance`. Not required. Not a platform.
 
 ## Screenshots (actual CLI output)
 
-Rendered from real commands via `scripts/generate_demo_screenshots.py`.
+Generated from this repo’s demo suite. Not mocked numbers.
 
-### CLI evaluation summary
+### Main CLI
 
-![CLI evaluation summary](docs/assets/cli-evaluation-summary.svg)
+![CLI evaluation summary](docs/images/cli-main.svg)
 
-### Regression comparison
+### Unique witness (why a test is kept)
 
-![Regression comparison](docs/assets/regression-comparison.svg)
+![Unique witness](docs/images/unique-witness.svg)
 
-### Unique witness / removal simulation
+### Removal simulation (SAFE vs KEEP)
 
-![Removal simulation](docs/assets/unique-witness-simulation.svg)
+![Removal simulation](docs/images/removal-simulation.svg)
 
 ### Suite health / evaluation debt
 
-![Suite health](docs/assets/suite-health.svg)
+![Suite health](docs/images/suite-health.svg)
 
-![Evaluation debt](docs/assets/evaluation-debt.svg)
+![Evaluation debt](docs/images/evaluation-debt.svg)
 
-### GitHub PR comment
+### Regression
 
-![GitHub PR comment](docs/assets/github-pr-comment.svg)
+![Regression](docs/images/regression.svg)
+
+### GitHub PR comment (rendered from `--format github`)
+
+![GitHub PR comment](docs/images/github-pr-comment.svg)
 
 ### HTML report
 
-Open [docs/assets/report.html](docs/assets/report.html) (generated by `evaltrim analyze --format html`).
+Open [docs/images/report.html](docs/images/report.html).
 
-## Measured benchmarks (v0.4.0)
+## Measured quality (v0.6.0)
 
-Command: `PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
-No LLM. Embeddings off. Constructed suites, not production traffic.
+Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
+No LLM. Embeddings off. Constructed suites — **not** production traffic.
 
-| Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Review-queue reduction |
-|---|---|---|---|---|---|---|
-| coding_agent | 1.0 | **1.0** | 1.0 | 1.0 | 1.0 | 46% |
-| customer_support | 1.0 | **0.875** | 0.93 | 1.0 | 1.0 | 19% |
-| shopping_agent | 1.0 | **1.0** | 1.0 | 1.0 | 1.0 | 40% |
+| Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
+| --- | --- | --- | --- | --- | --- | --- |
+| coding_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 46% |
+| customer_support | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 25% |
+| shopping_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 40% |
 
-Recall before this release (v0.2.0, same harness, smaller suites): coding 0.50, customer_support 0.40, shopping_agent 0.25. Precision stayed 1.0. Safety stayed 1.0.
+Recall **before** this pass (v0.4.0, same harness): customer_support **0.875** (missed `parcel is late` / `parcel arrived late`). Precision and retirement safety stayed **1.0**. We did not lower the global merge threshold; normalization + content-token overlap was enough for that pair without collapsing the store-credit hard negative.
 
-**Tradeoff:** customer_support wording pair (`parcel is late` vs `parcel arrived late`) is still below the MERGE bar. We did not lower merge confidence to catch it, because that would risk collapsing hard negatives (refund vs refund+store-credit).
+v0.2.0 recall on smaller suites was coding 0.50 / customer_support 0.40 / shopping 0.25.
 
-### Scale (synthetic suites, no quality labels)
+## Scale (synthetic suites, no quality labels)
 
-| n | runtime | peak MiB | candidate pairs |
-|---|---|---|---|
-| 100 | 2.68s | 7.3 | 4950 |
-| 500 | 15.09s | 75.5 | 21840 |
-| 1000 | 35.69s | 136.5 | 38881 |
-| 5000 | 466.7s | 614.7 | 174694 |
+Cold run, `EVALTRIM_NO_CACHE=1`. v0.4.0 5,000-test runtime was **466.7s** (~315s in per-test removal). Indexed incremental coverage is the removal path in 0.6.
 
-10,000 was not run. At 5,000 the bottleneck is **counterfactual removal** (~315s), not candidate generation. Blocking already limits pairs; removal still walks each test.
+| n | runtime | peak MiB | candidate pairs | removal_seconds (this run) |
+| --- | --- | --- | --- | --- |
+| 100 | 2.84s | 7.8 | 4950 | 0.08 |
+| 500 | 13.79s | 77.0 | 21840 | 1.36 |
+| 1000 | 28.51s | 138.7 | 38881 | 4.26 |
+| 5000 | **249.3s** | 627.7 | 174694 | 87.6 |
 
-## CLI map
+After a further coverage-delta change (same safety tests), 1000-test `removal_seconds` stayed ~4s; 5k wall clock is limited by similarity (~98s) and blocking (~59s). **10,000 was not finished** (still running past 8 minutes on this agent; dominated by pair scoring, not a correctness issue).
 
-```text
-evaltrim analyze SUITE          # suite intelligence + evidence
-evaltrim run SUITE              # local graders
-evaltrim compare A B            # suite snapshot diff
-evaltrim compare-runs A B       # recorded-run regression classes
-evaltrim watch SUITE --once     # debounce file watch
-evaltrim impacted-tests SUITE PATHS
-evaltrim health / debt / portfolio / maintain
-evaltrim ingest-failure / ingest-traces / flake-report
-```
+The remaining 5k cost is **similarity + blocking**, not full-suite removal rebuilds. Pair scores persist locally so a later run that changes only a few tests can reuse unchanged pairs (cache keys include algorithm version).
 
-## Privacy
+## Not guaranteed
 
-Local by default. No telemetry. Optional embeddings are a hashing encoder unless you opt in. See [docs/privacy.md](docs/privacy.md).
+- Detecting every unknown behavior
+- Offline semantic similarity is a heuristic, not an embedding model
+- Drift “likely source” is not causal proof
+- Benchmark scores do not imply production correctness
+- Automatic retirement is **never** performed
+- Impacted-test selection is not a complete call graph
+- Optional MCP is a thin dispatcher, not an IDE
+
+Deferred on purpose: IDE plugins, full MCP platform, self-healing, automatic repair, canary/rollback, hosted SaaS.
 
 ## Docs
 
 - [Architecture](docs/architecture.md)
-- [Traces](docs/traces.md)
-- [Regression](docs/regression.md)
-- [Watch / impacted tests](docs/watch.md)
-- [Behavior graph & witnesses](docs/behavior-model.md)
+- [JSON for coding agents](docs/json.md)
+- [Network & privacy](docs/network.md)
+- [Cache & storage](docs/cache.md)
+- [Semantic backends](docs/semantic.md)
+- [MCP adapter](docs/mcp.md)
 - [Removal simulation](docs/removal-simulation.md)
-- [Suite health & debt](docs/health.md)
-- [GitHub Action](docs/github-action.md)
 - [Benchmarks](docs/benchmark.md)
 - [Limitations](docs/limitations.md)
+- [Changelog](CHANGELOG.md)
+- [Release audit](RELEASE_AUDIT.md)
 
 ## License
 

@@ -1,0 +1,15 @@
+# Removal simulation: `refund-002b`
+
+## BEFORE
+Tests: 12
+Behavior coverage: 100.0%
+Critical coverage: 100.0%
+
+## AFTER removing `refund-002b`
+Tests: 11
+Behavior coverage: 100.0% -> 100.0%
+Critical coverage: 100.0% -> 100.0%
+
+Verdict: **SAFE_TO_RETIRE**
+
+- No unique behavior-atom or critical coverage loss.

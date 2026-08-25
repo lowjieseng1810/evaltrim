@@ -1,0 +1,12 @@
+# Evaluation Debt Report
+Open items: 15
+- stale_tests: 2
+- redundant_tests: 3
+- low_value_tests: 4
+- flaky_tests: 0
+- quarantined_tests: 0
+- conflicts: 2
+- uncovered_requirements: 0
+- missing_provenance: 0
+- uncertainty: 4
+Debt items are review queues. Flaky tests are never deleted automatically.

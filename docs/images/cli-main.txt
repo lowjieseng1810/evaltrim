@@ -1,0 +1,30 @@
+{
+  "project": "demo",
+  "suite_size": 12,
+  "active_tests": 9,
+  "recommendations": {
+    "KEEP": 5,
+    "MERGE": 3,
+    "RETIRE": 0,
+    "REVIEW": 4
+  },
+  "flaky": [],
+  "stale": [
+    "refund-002b",
+    "refund-small-dup"
+  ],
+  "conflicts": [
+    "conflict-a",
+    "conflict-b"
+  ],
+  "critical_coverage": 1.0,
+  "evaluation_debt": {
+    "open_item_count": 15
+  },
+  "suite_health": {
+    "composite": 87.1,
+    "heuristic": true
+  },
+  "recent_regressions": [],
+  "note": "Status is local and heuristic. EvalTrim never deletes tests."
+}

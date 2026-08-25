@@ -1,0 +1,13 @@
+Composite (heuristic): 87.1
+- coverage: 100.0
+- critical_coverage: 100.0
+- redundancy: 75.0
+- diversity: 83.3
+- freshness: 83.3
+- flakiness: 100.0
+- oracle_health: 66.7
+- conflicts: 66.7
+- provenance: 100.0
+- maintainability: 91.7
+Suite health is a local heuristic for maintainers. It is not a statistical 
+guarantee of agent quality.

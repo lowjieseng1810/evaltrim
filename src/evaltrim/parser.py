@@ -19,6 +19,8 @@ def load_suite(path: str | Path) -> TestSuite:
         raise SuiteNotFoundError(f"Suite not found: {file_path}")
     try:
         raw = file_path.read_text(encoding="utf-8")
+    except PermissionError as exc:
+        raise SuiteValidationError(f"Permission denied reading suite: {file_path}") from exc
     except OSError as exc:
         raise SuiteValidationError(f"Unable to read suite: {file_path}") from exc
     suffix = file_path.suffix.lower()

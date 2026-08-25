@@ -5,13 +5,16 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime
 from time import perf_counter
+from typing import Any
 
 from evaltrim.behavior import extract_behavior
 from evaltrim.boundary import classify_boundary, inject_boundary_atoms, unique_boundary_ids
+from evaltrim.cache import cache_enabled, load_cached_analysis, store_cached_analysis, suite_fingerprint
 from evaltrim.candidates import CandidatePairGenerator
 from evaltrim.coverage import compute_coverage, covers_declared, unique_atoms_by_test
 from evaltrim.embeddings import load_encoder
 from evaltrim.errors import TestNotFoundError
+from evaltrim.incremental import PairScoreCache
 from evaltrim.intelligence.boundaries import missing_boundary_candidates
 from evaltrim.intelligence.compression import compression_stats
 from evaltrim.intelligence.conflicts import evaluator_conflict_graph
@@ -37,7 +40,21 @@ from evaltrim.oracle import analyze_oracles
 from evaltrim.recommend import recommend
 from evaltrim.scoring import value_score
 from evaltrim.similarity import SimilarityEngine
-from evaltrim.simulate import simulate_removal
+from evaltrim.simulate import RemovalIndex, simulate_from_index, simulate_removal
+
+
+def _pair_fields(raw: dict[str, Any]) -> tuple[float, float, float, float, float, list[str], list[str], list[str]]:
+    return (
+        float(raw["score"]),
+        float(raw["semantic"]),
+        float(raw["behavior_overlap"]),
+        float(raw["expected_similarity"]),
+        float(raw["historical_overlap"]),
+        [str(x) for x in raw["shared"]],
+        [str(x) for x in raw["unique_left"]],
+        [str(x) for x in raw["unique_right"]],
+    )
+
 
 METHODOLOGY = (
     "Scores are heuristics, not statistical guarantees. Semantic similarity combines "
@@ -59,7 +76,13 @@ def analyze_suite(
     *,
     extractor: BehaviorExtractor | None = None,
     pair_limit: int | None = None,
+    use_cache: bool = True,
 ) -> AnalysisResult:
+    if use_cache and pair_limit is None:
+        cached = load_cached_analysis(suite)
+        if cached is not None:
+            cached.timings = {**dict(cached.timings), "cache_hit": 1.0}
+            return cached
     t0 = perf_counter()
     tests = suite.tests
     declared = suite.critical_behaviors
@@ -101,22 +124,37 @@ def analyze_suite(
     semantic_triples: list[tuple[str, str, float, float]] = []
 
     t_sim = perf_counter()
+    pair_cache = PairScoreCache.load(suite) if pair_limit is None else None
     for i, j in index_pairs:
-        raw = engine.pair_score(tests[i].id, tests[j].id)
-        score = float(raw["score"])
+        pair_hit = pair_cache.get(tests[i], tests[j]) if pair_cache else None
+        if pair_hit is None:
+            scored = engine.pair_score(tests[i].id, tests[j].id)
+            raw: dict[str, Any] = {
+                "score": scored["score"],
+                "semantic": scored["semantic"],
+                "behavior_overlap": scored["behavior_overlap"],
+                "expected_similarity": scored["expected_similarity"],
+                "historical_overlap": scored["historical_overlap"],
+                "shared": list(scored["shared"]),
+                "unique_left": list(scored["unique_left"]),
+                "unique_right": list(scored["unique_right"]),
+            }
+            if pair_cache is not None:
+                pair_cache.put(tests[i], tests[j], raw)
+        else:
+            raw = pair_hit
+        score, semantic, overlap, expected, historical, shared, unique_left, unique_right = _pair_fields(raw)
         max_redundancy[tests[i].id] = max(max_redundancy[tests[i].id], score)
         max_redundancy[tests[j].id] = max(max_redundancy[tests[j].id], score)
-        semantic = float(raw["semantic"])
-        expected = float(raw["expected_similarity"])
         semantic_triples.append((tests[i].id, tests[j].id, semantic, expected))
         decision = _decision(
             score=score,
             semantic=semantic,
-            overlap=float(raw["behavior_overlap"]),
+            overlap=overlap,
             expected=expected,
-            historical=float(raw["historical_overlap"]),
-            unique_left=list(raw["unique_left"]),
-            unique_right=list(raw["unique_right"]),
+            historical=historical,
+            unique_left=unique_left,
+            unique_right=unique_right,
             left_critical=behaviors[i].critical,
             right_critical=behaviors[j].critical,
             merge_threshold=cfg.merge_threshold,
@@ -133,18 +171,22 @@ def analyze_suite(
                     right_id=tests[j].id,
                     score=score,
                     semantic=semantic,
-                    behavior_overlap=float(raw["behavior_overlap"]),
+                    behavior_overlap=overlap,
                     expected_similarity=expected,
-                    historical_overlap=float(raw["historical_overlap"]),
-                    shared=list(raw["shared"]),
-                    unique_left=list(raw["unique_left"]),
-                    unique_right=list(raw["unique_right"]),
+                    historical_overlap=historical,
+                    shared=shared,
+                    unique_left=unique_left,
+                    unique_right=unique_right,
                     recommendation=decision.recommendation,
                     rationale=decision.reasons[0] if decision.reasons else decision.label,
                     decision=decision,
                 )
             )
     similarity_s = perf_counter() - t_sim
+    pair_hits = float(pair_cache.hits) if pair_cache else 0.0
+    pair_misses = float(pair_cache.misses) if pair_cache else float(len(index_pairs))
+    if pair_cache is not None:
+        pair_cache.save(suite)
     pairs.sort(key=lambda p: p.score, reverse=True)
     if pair_limit is not None:
         pairs = pairs[:pair_limit]
@@ -160,6 +202,15 @@ def analyze_suite(
     max_cost = max(((t.run_stats.estimated_cost_usd or 0.0) if t.run_stats else 0.0) for t in tests) or 1.0
 
     t_rem = perf_counter()
+    rem_index = RemovalIndex.build(
+        tests,
+        behaviors,
+        declared_critical=declared,
+        baseline=coverage,
+        policies=policies,
+        unique=unique,
+        suite=suite,
+    )
     merge_ids = {p.left_id for p in pairs if p.recommendation == RecommendationState.MERGE} | {
         p.right_id for p in pairs if p.recommendation == RecommendationState.MERGE
     }
@@ -174,16 +225,7 @@ def analyze_suite(
     recommendations = []
     witnesses: list[WitnessRecord] = []
     for test, behavior in zip(tests, behaviors, strict=True):
-        sim = simulate_removal(
-            tests,
-            behaviors,
-            test.id,
-            declared_critical=declared,
-            baseline=coverage,
-            policies=policies,
-            unique=unique,
-            suite=suite,
-        )
+        sim = simulate_from_index(rem_index, test.id)
         uniq = unique.get(test.id, [])
         uniq_crit = _unique_critical(test.id, behavior, tests, behaviors, declared, uniq)
         if test.id in req_unique:
@@ -309,6 +351,8 @@ def analyze_suite(
             "similarity_seconds": round(similarity_s, 6),
             "removal_seconds": round(removal_s, 6),
             "total_seconds": round(total, 6),
+            "pair_cache_hits": pair_hits,
+            "pair_cache_misses": pair_misses,
         },
         candidate_pairs_considered=len(index_pairs),
         embeddings_used=encoder is not None,
@@ -318,6 +362,26 @@ def analyze_suite(
     analysis.missing_boundaries = missing_boundary_candidates(suite)
     analysis.behavior_graph = behavior_graph(suite, analysis)
     analysis.compression = compression_stats(analysis)
+    if use_cache and pair_limit is None:
+        store_cached_analysis(suite, analysis)
+        try:
+            if cache_enabled():
+                from evaltrim.store import append_history
+
+                append_history(
+                    "analysis",
+                    {
+                        "name": suite.name,
+                        "keep": keep,
+                        "merge": merge,
+                        "retire": retire,
+                        "review": review,
+                        "critical_coverage": analysis.coverage.critical_coverage,
+                    },
+                    suite_hash=suite_fingerprint(suite),
+                )
+        except Exception:  # noqa: BLE001
+            pass
     return analysis
 
 

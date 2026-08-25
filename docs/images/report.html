@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>EvalTrim report</title>
+<style>
+body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem; color: #111; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
+.muted { color: #555; }
+</style></head><body>
+<h1>EvalTrim</h1>
+<p class="muted">Heuristic local report. Not a hosted dashboard.</p>
+<p>12 tests · KEEP 5 · MERGE 3 · RETIRE 0 · REVIEW 4</p>
+<p>Critical coverage 100.0% · Behavior coverage 100.0%</p>
+<table><thead><tr><th>Test</th><th>Recommendation</th><th>Value</th><th>Unique atoms</th></tr></thead>
+<tbody><tr><td>refund-001</td><td>REVIEW</td><td>44.2</td><td>—</td></tr><tr><td>refund-002</td><td>REVIEW</td><td>42.2</td><td>—</td></tr><tr><td>refund-002b</td><td>MERGE</td><td>36.2</td><td>—</td></tr><tr><td>refund-boundary</td><td>KEEP</td><td>76.8</td><td>condition:amount_at_limit, condition:policy_boundary, condition:threshold_equality</td></tr><tr><td>refund-small</td><td>MERGE</td><td>15.5</td><td>—</td></tr><tr><td>refund-small-dup</td><td>MERGE</td><td>8.8</td><td>—</td></tr><tr><td>refund-ambiguous</td><td>KEEP</td><td>76.8</td><td>action:clarification, condition:ambiguous_request, condition:conflicting_instruction</td></tr><tr><td>privacy-delete</td><td>KEEP</td><td>74.9</td><td>condition:destructive, domain:privacy, state:unauthenticated</td></tr><tr><td>auth-reset</td><td>KEEP</td><td>56.8</td><td>condition:unauthenticated, domain:authentication</td></tr><tr><td>policy-abuse</td><td>KEEP</td><td>50.5</td><td>condition:policy_violation</td></tr><tr><td>conflict-a</td><td>REVIEW</td><td>15.5</td><td>—</td></tr><tr><td>conflict-b</td><td>REVIEW</td><td>15.5</td><td>—</td></tr></tbody></table>
+<p class="muted">Scores are heuristics, not statistical guarantees. Semantic similarity combines normalized-token overlap, character n-grams, corpus-free TF cosine, and collection TF-IDF. Optional hashing embeddings or an LLM comparator may be enabled explicitly. Embeddings and semantic retrieval may CREATE CANDIDATES; they never independently authorize RETIRE. Redundancy also uses Jaccard overlap of behavior atoms, expected-oracle similarity, and historical failure-rate closeness. Candidate generation uses full pairwise comparison below config.full_pairwise_limit and layered blocking (exact hash, lexical prefix, behavior, inverted-index, optional embeddings) above it. Unique witnesses include singleton atoms, condition combinations, boundaries, unique requirements, and unique failure families. Removal is simulated in memory and never deletes files. KEEP always wins over RETIRE when a test is the only witness for a critical behavior. A high semantic score alone never retires.</p>
+</body></html>

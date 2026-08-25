@@ -99,10 +99,30 @@ SYNONYMS: dict[str, str] = {
     "gone": "",
     "keep": "",
     "logic": "behavior",
+    "anything": "",
+    "something": "",
+    "whatever": "",
+    "arrived": "arrive",
+    "arriving": "arrive",
+    "comes": "arrive",
+    "came": "arrive",
 }
 
 _TOKEN_RE = re.compile(r"[a-z0-9_$]+")
 _MONEY_RE = re.compile(r"\$?\s*(\d+(?:,\d{3})*(?:\.\d+)?)")
+
+
+def light_stem(tok: str) -> str:
+    """Deterministic suffix strip. Conservative: only long tokens."""
+    if len(tok) > 6 and tok.endswith("ing"):
+        return tok[:-3]
+    if len(tok) > 5 and tok.endswith("ed"):
+        return tok[:-2]
+    if len(tok) > 5 and tok.endswith("es"):
+        return tok[:-2]
+    if len(tok) > 5 and tok.endswith("s") and not tok.endswith("ss"):
+        return tok[:-1]
+    return tok
 
 
 def word_to_number(tokens: list[str]) -> list[str]:
@@ -142,6 +162,9 @@ def normalize_text(text: str) -> str:
         if tok.startswith("$"):
             tok = tok[1:]
         mapped = SYNONYMS.get(tok, tok)
+        if mapped == "":
+            continue
+        mapped = light_stem(mapped)
         if mapped == "":
             continue
         if re.fullmatch(r"\d+(?:\.\d+)?", mapped):

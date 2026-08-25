@@ -54,6 +54,7 @@ class CommandAdapter(AgentAdapter):
             text=True,
             timeout=self.timeout,
             check=False,
+            shell=False,
         )
         latency = (perf_counter() - t0) * 1000
         stdout = proc.stdout.strip()

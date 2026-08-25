@@ -1,0 +1,11 @@
+## EvalTrim
+
+12 tests · KEEP 5 · MERGE 3 · RETIRE 0 · REVIEW 4
+Potentially redundant: 7 · Unique witnesses: 5
+Critical coverage: 100% · Review-queue reduction: 25%
+
+No declared critical coverage gaps.
+Oracle conflicts requiring REVIEW: 2
+
+EvalTrim never deletes tests. Full detail is in the workflow artifacts.
+Report: `evaltrim-report.md`

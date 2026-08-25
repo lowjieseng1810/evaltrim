@@ -1,27 +1,30 @@
 # Contributing
 
-EvalTrim is a CLI for evidence-backed eval-suite maintenance. Changes should serve that job: coverage mapping, redundancy, unique witnesses, removal simulation, and reports.
+EvalTrim is a CLI for evidence-backed eval-suite maintenance.
 
 ## Setup
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+python3 -m pip install -e ".[dev]"
 ```
 
-## Checks
+## Checks (release gates)
 
 ```bash
-ruff check src tests
-pytest
-evaltrim analyze examples/demo_suite.yaml
+python3 -m pytest
+python3 -m ruff check src tests
+python3 -m ruff format --check src tests
+python3 -m mypy src/evaltrim
+python3 -m build
+scripts/demo.sh
 ```
 
 ## Guidelines
 
-- Type-annotate public functions.
-- Do not add a hosted service, dashboard, or telemetry.
 - Do not auto-delete or auto-edit user suites.
-- Keep LLM code behind `evaltrim.llm` interfaces; defaults must work offline.
-- Prefer tests that lock recommendation policy (especially: never `RETIRE` a unique critical witness).
+- Defaults must work offline.
+- Unique critical witnesses must never `RETIRE`.
+- Do not add hosted SaaS, IDE, or a full MCP platform in this tree.
+- Do not lower the global merge threshold to chase recall.

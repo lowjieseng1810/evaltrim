@@ -49,9 +49,10 @@ class DriftSource(str, Enum):
 
 
 class ImpactPriority(str, Enum):
+    CRITICAL = "CRITICAL"
     DIRECT = "DIRECT"
     ADJACENT = "ADJACENT"
-    CRITICAL = "CRITICAL"
+    RISKY = "RISKY"
     LOW_PRIORITY = "LOW_PRIORITY"
 
 
@@ -72,6 +73,22 @@ class SafetyPolicies(BaseModel):
     minimum_retirement_confidence: float = 0.80
     fail_on_oracle_conflict: bool = True
     critical_behavior_loss: str = "fail"
+
+    @model_validator(mode="after")
+    def _safe_ranges(self) -> SafetyPolicies:
+        if not 0.0 <= self.minimum_critical_coverage <= 1.0:
+            raise ValueError("minimum_critical_coverage must be in [0, 1]")
+        if not 0.0 <= self.max_behavior_coverage_drop <= 1.0:
+            raise ValueError("max_behavior_coverage_drop must be in [0, 1]")
+        if not 0.0 <= self.minimum_retirement_confidence <= 1.0:
+            raise ValueError("minimum_retirement_confidence must be in [0, 1]")
+        if self.minimum_retirement_confidence < 0.5:
+            raise ValueError(
+                "unsafe retirement setting: minimum_retirement_confidence < 0.5 would allow low-confidence RETIRE"
+            )
+        if self.critical_behavior_loss not in {"fail", "warn"}:
+            raise ValueError("critical_behavior_loss must be 'fail' or 'warn'")
+        return self
 
 
 class Requirement(BaseModel):
@@ -234,6 +251,20 @@ class AnalysisConfig(BaseModel):
     policy_threshold: float = 500.0
     policies: SafetyPolicies = Field(default_factory=SafetyPolicies)
 
+    @model_validator(mode="after")
+    def _threshold_ranges(self) -> AnalysisConfig:
+        for name in ("redundancy_threshold", "merge_threshold"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1]")
+        if self.merge_threshold < self.redundancy_threshold:
+            raise ValueError("merge_threshold must be >= redundancy_threshold")
+        if self.stale_days < 1 or self.aging_days < 1:
+            raise ValueError("stale_days and aging_days must be >= 1")
+        if self.candidate_neighbor_k < 1 or self.full_pairwise_limit < 1:
+            raise ValueError("candidate_neighbor_k and full_pairwise_limit must be >= 1")
+        return self
+
 
 class TestSuite(BaseModel):
     """Canonical suite document (YAML/JSON)."""
@@ -350,6 +381,7 @@ class EvidenceLedger(BaseModel):
     requirement_coverage_lost: int = 0
     historical_failure_contribution: float = 0.0
     counterfactual_coverage_loss: float = 0.0
+    counterfactual_status: str | None = None
     oracle_status: str | None = None
     notes: list[str] = Field(default_factory=list)
 

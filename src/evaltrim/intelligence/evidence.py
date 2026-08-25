@@ -28,6 +28,7 @@ def ledger_for(
         requirement_coverage_lost=len(simulation.lost_requirement_ids),
         historical_failure_contribution=hist,
         counterfactual_coverage_loss=round(max(0.0, drop), 6),
+        counterfactual_status=simulation.verdict.value,
         oracle_status=oracle_status.value if oracle_status else None,
         notes=list(rec.reasons),
     )

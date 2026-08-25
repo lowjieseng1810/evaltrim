@@ -181,8 +181,8 @@ class SimilarityEngine:
         char = self.char_index.pairwise(i, j)
         raw = self.raw_index.pairwise(i, j)
         amounts = amount_agreement(left, right)
-        content_l = [t for t in n_left if len(t) >= 5 or t.startswith("amt_") or "_" in t]
-        content_r = [t for t in n_right if len(t) >= 5 or t.startswith("amt_") or "_" in t]
+        content_l = [t for t in n_left if len(t) >= 4 or t.startswith("amt_") or "_" in t]
+        content_r = [t for t in n_right if len(t) >= 4 or t.startswith("amt_") or "_" in t]
         content = _prefix_jaccard(content_l, content_r) if (content_l or content_r) else jac
         lexical = 0.30 * jac + 0.18 * tf_cos + 0.14 * char + 0.12 * word + 0.10 * raw + 0.16 * content
         if amounts >= 0.99 and jac >= 0.45:
@@ -191,6 +191,9 @@ class SimilarityEngine:
             lexical = max(lexical, 0.86)
         if content >= 0.5 and jac >= 0.32:
             lexical = max(lexical, 0.84)
+        shared_content = set(content_l) & set(content_r)
+        if len(shared_content) >= 2 and jac >= 0.35:
+            lexical = max(lexical, 0.85)
         rare_shared = [t for t in set(n_left) & set(n_right) if len(t) >= 8 or "_" in t]
         if rare_shared and jac >= 0.28:
             lexical = max(lexical, 0.86)

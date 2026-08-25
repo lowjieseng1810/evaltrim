@@ -1,0 +1,8 @@
+## EvalTrim suite diff
+Tests: 12 -> 12
+Critical coverage: 100.0% -> 100.0%
+New behaviors: 0
+Removed behaviors: 0
+Potential suite-diff risk: LOW
+This compares static suite analyses, not live agent behavior. A HIGH risk means 
+declared critical coverage dropped in the suite snapshot.

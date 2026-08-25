@@ -1,0 +1,140 @@
+# EvalTrim Report
+
+## Summary
+
+12 tests analyzed
+5 recommended KEEP
+3 MERGE
+0 RETIRE
+4 REVIEW
+
+Critical behavior coverage:
+100.0%
+
+Behavior coverage:
+100.0%
+
+Potential CI reduction:
+25%
+
+> Potential CI reduction counts MERGE + RETIRE recommendations. It is a review queue, not an automatic deletion plan.
+
+## Top Retirement Candidates
+
+None. No test met the stale + redundant + non-unique bar.
+
+## Unique Witnesses
+
+- `refund-boundary`: condition:amount_at_limit, condition:policy_boundary, condition:threshold_equality
+- `refund-ambiguous`: action:clarification, condition:ambiguous_request, condition:conflicting_instruction
+- `privacy-delete`: condition:destructive, domain:privacy, state:unauthenticated
+- `auth-reset`: condition:unauthenticated, domain:authentication
+- `policy-abuse`: condition:policy_violation
+
+## Critical Behaviors
+
+- `payment`: covered
+- `destructive_action`: covered
+- `privacy`: covered
+- `policy_violation`: covered
+- `authentication`: covered
+
+## Coverage Risks
+
+- `refund-boundary` uniquely protects critical-adjacent behavior (condition:amount_at_limit, condition:policy_boundary, condition:threshold_equality).
+- `refund-ambiguous` uniquely protects critical-adjacent behavior (action:clarification, condition:ambiguous_request, condition:conflicting_instruction).
+- `privacy-delete` uniquely protects critical-adjacent behavior (condition:destructive, domain:privacy, state:unauthenticated).
+- `auth-reset` uniquely protects critical-adjacent behavior (condition:unauthenticated, domain:authentication).
+- `policy-abuse` uniquely protects critical-adjacent behavior (condition:policy_violation).
+
+Oracle conflicts (similar inputs, diverging expected):
+- `conflict-a`
+- `conflict-b`
+
+## Recommendations
+
+### `refund-001` — REVIEW
+Value score (heuristic): 44.2/100 · confidence 0.60
+- No unique behavior-atom or critical coverage loss.
+- Historical failures exist; removal is UNCERTAIN without review.
+- Evidence: semantic_similarity=0.7052 behavior_overlap=1.0 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=2.0 counterfactual_coverage_loss=0.0
+
+### `refund-002` — REVIEW
+Value score (heuristic): 42.2/100 · confidence 0.60
+- No unique behavior-atom or critical coverage loss.
+- Historical failures exist; removal is UNCERTAIN without review.
+- Evidence: semantic_similarity=0.994234 behavior_overlap=1.0 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=1.0 counterfactual_coverage_loss=0.0
+
+### `refund-002b` — MERGE
+Value score (heuristic): 36.2/100 · confidence 0.80
+- Oracle provenance is stale; never RETIRE while the oracle is uncertain.
+- Highly redundant with no unique behavioral contribution.
+- Prefer merging overlapping cases rather than deleting without review.
+- Stale oracle: MERGE rather than RETIRE.
+- Evidence: semantic_similarity=0.994234 behavior_overlap=1.0 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.0
+
+### `refund-boundary` — KEEP
+Value score (heuristic): 76.8/100 · confidence 0.90
+- Unique combination of behavior conditions.
+- Evidence: semantic_similarity=0.0 behavior_overlap=0.0 unique_witnesses_lost=3 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.125
+
+### `refund-small` — MERGE
+Value score (heuristic): 15.5/100 · confidence 0.80
+- Highly redundant with no unique behavioral contribution.
+- Prefer merging overlapping cases rather than deleting without review.
+- Evidence: semantic_similarity=1.0 behavior_overlap=1.0 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.0
+
+### `refund-small-dup` — MERGE
+Value score (heuristic): 8.8/100 · confidence 0.80
+- Oracle provenance is stale; never RETIRE while the oracle is uncertain.
+- Highly redundant with no unique behavioral contribution.
+- Prefer merging overlapping cases rather than deleting without review.
+- Stale oracle: MERGE rather than RETIRE.
+- Evidence: semantic_similarity=1.0 behavior_overlap=1.0 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.0
+
+### `refund-ambiguous` — KEEP
+Value score (heuristic): 76.8/100 · confidence 0.90
+- Unique combination of behavior conditions.
+- Evidence: semantic_similarity=0.0 behavior_overlap=0.0 unique_witnesses_lost=3 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.125
+
+### `privacy-delete` — KEEP
+Value score (heuristic): 74.9/100 · confidence 0.99
+- Only meaningful witness for a critical behavior, or removal loses critical coverage.
+- Evidence: semantic_similarity=0.0 behavior_overlap=0.0 unique_witnesses_lost=3 critical_coverage_lost=0.2 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.125
+
+### `auth-reset` — KEEP
+Value score (heuristic): 56.8/100 · confidence 0.99
+- Only meaningful witness for a critical behavior, or removal loses critical coverage.
+- Evidence: semantic_similarity=0.0 behavior_overlap=0.0 unique_witnesses_lost=2 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.083333
+
+### `policy-abuse` — KEEP
+Value score (heuristic): 50.5/100 · confidence 0.99
+- Only meaningful witness for a critical behavior, or removal loses critical coverage.
+- Evidence: semantic_similarity=0.0 behavior_overlap=0.0 unique_witnesses_lost=1 critical_coverage_lost=0.2 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.041667
+
+### `conflict-a` — REVIEW
+Value score (heuristic): 15.5/100 · confidence 0.55
+- Oracle conflict or incompatible tags; never RETIRE on this signal.
+- Evidence: semantic_similarity=1.0 behavior_overlap=0.333333 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.0
+
+### `conflict-b` — REVIEW
+Value score (heuristic): 15.5/100 · confidence 0.55
+- Oracle conflict or incompatible tags; never RETIRE on this signal.
+- Evidence: semantic_similarity=1.0 behavior_overlap=0.333333 unique_witnesses_lost=0 critical_coverage_lost=0.0 requirement_coverage_lost=0 historical_failure_contribution=0.0 counterfactual_coverage_loss=0.0
+
+## Redundant Pairs
+
+- `refund-small` ↔ `refund-small-dup`: **1.00** (semantic 1.00, behavior 1.00, expected 1.00, history 1.00)
+  REDUNDANT_CANDIDATE: high overlap on semantics, behavior, and expected; no unique atom.
+- `refund-002` ↔ `refund-002b`: **0.99** (semantic 0.99, behavior 1.00, expected 1.00, history 0.97)
+  REDUNDANT_CANDIDATE: high overlap on semantics, behavior, and expected; no unique atom.
+- `refund-001` ↔ `refund-002`: **0.89** (semantic 0.71, behavior 1.00, expected 1.00, history 0.97)
+  Possible duplicate below merge confidence.
+- `refund-001` ↔ `refund-002b`: **0.89** (semantic 0.71, behavior 1.00, expected 1.00, history 0.95)
+  Possible duplicate below merge confidence.
+- `conflict-a` ↔ `conflict-b`: **0.63** (semantic 1.00, behavior 0.33, expected 0.13, history 1.00)
+  Unique behavior remains on at least one side.
+
+## Methodology
+
+Scores are heuristics, not statistical guarantees. Semantic similarity combines normalized-token overlap, character n-grams, corpus-free TF cosine, and collection TF-IDF. Optional hashing embeddings or an LLM comparator may be enabled explicitly. Embeddings and semantic retrieval may CREATE CANDIDATES; they never independently authorize RETIRE. Redundancy also uses Jaccard overlap of behavior atoms, expected-oracle similarity, and historical failure-rate closeness. Candidate generation uses full pairwise comparison below config.full_pairwise_limit and layered blocking (exact hash, lexical prefix, behavior, inverted-index, optional embeddings) above it. Unique witnesses include singleton atoms, condition combinations, boundaries, unique requirements, and unique failure families. Removal is simulated in memory and never deletes files. KEEP always wins over RETIRE when a test is the only witness for a critical behavior. A high semantic score alone never retires.

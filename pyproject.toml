@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evaltrim"
-version = "0.4.0"
+version = "0.6.0"
 description = "The evaluation control plane for AI agents: run, replay, compare, understand, and optimize eval suites."
 readme = "README.md"
 license = { text = "MIT" }

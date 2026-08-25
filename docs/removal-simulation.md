@@ -5,7 +5,7 @@ This is the proof mechanism. EvalTrim never deletes files.
 Given a candidate id:
 
 1. Compute baseline behavior coverage and critical coverage.
-2. Drop that test from an in-memory copy.
+2. Drop that test using a precomputed holder index (O(unique atoms), not a full coverage rebuild per candidate).
 3. Recompute coverage, unique witnesses, and lost atoms.
 4. Emit a `RemovalSimulation` with a verdict.
 

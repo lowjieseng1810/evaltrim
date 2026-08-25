@@ -3,7 +3,9 @@
 EvalTrim is local-first.
 
 - No hosted backend.
-- No telemetry in v0.1.
+- No telemetry.
+
+See [network.md](network.md).
 - No automatic upload of suites or reports.
 - Analysis reads a file you pass on the command line and writes files you ask for (`--output`, `evaltrim maintain`).
 - LLM adapters are optional interfaces. The default path never sends data off-box.

@@ -9,4 +9,4 @@
 - Watch uses mtime polling; it is not an OS-specific recursive inotify daemon.
 - `llm_judge` grader still skips unless you add a provider.
 - EvalTrim never deletes or rewrites suite files.
-- v0.5+ items (IDE, MCP, self-healing, hosted SaaS) are not implemented.
+- v0.5+ items (IDE, full MCP platform, self-healing, hosted SaaS) are not implemented. A tiny optional `mcp_adapter.dispatch` exists; it is not a server.

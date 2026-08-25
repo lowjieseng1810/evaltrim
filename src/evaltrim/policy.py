@@ -24,7 +24,10 @@ def load_policy_file(path: str | Path | None) -> AnalysisConfig | None:
     file_path = Path(path)
     if not file_path.exists():
         raise PolicyError(f"Policy file not found: {file_path}")
-    data = yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise PolicyError(f"Policy file is not valid YAML: {file_path}: {exc}") from exc
     if not isinstance(data, dict):
         raise PolicyError("Policy file root must be a mapping")
     payload: dict[str, Any] = dict(data)
