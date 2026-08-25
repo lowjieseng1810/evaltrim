@@ -1,0 +1,9 @@
+id: 05_multiturn
+version: 1
+input: User → agent → tool → agent → ambiguous user → agent → required end state
+expected_behavior: State preserved; unused branch skipped; replayable
+measurable_metric: scenario correctness, state preservation, replayability
+methodology: examples/scenario_refund.yaml via replay_scenario + EchoExpectedAdapter
+pass_fail: overall passed and end_state matched
+comparable_tools: [evaltrim]
+note: Promptfoo/Inspect multi-turn UNMEASURED (not reproduced)

@@ -72,7 +72,7 @@ Recorded-run classes: `UNCHANGED`, `EXPECTED_CHANGE`, `POSSIBLE_REGRESSION`, `CO
 
 ## Also JSON
 
-`health`, `debt`, `flaky` / `flake-report`, `benchmark`, `experiment`, `experiment-matrix`, `redteam`, `mutate`, `cluster`, `compress-failures`, `competitive-benchmark`, `maintain`.
+`health`, `debt`, `flaky` / `flake-report`, `benchmark`, `benchmark competitive`, `experiment`, `experiment-matrix`, `redteam`, `mutate`, `cluster`, `compress-failures`, `competitive-benchmark`, `maintain`.
 
 `--format json` writes UTF-8 JSON to stdout (not wrapped by Rich tables).
 

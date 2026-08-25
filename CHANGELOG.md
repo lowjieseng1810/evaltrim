@@ -4,6 +4,14 @@
 
 Internal maturity pass (engineering target, not a public 9/10 score).
 
+Competitive verification (same day, not a feature wave):
+
+- Common 20-task suite under `benchmarks/competitive/`
+- Version lock in `benchmarks/competitive/environment.yaml`
+- Head-to-head AgentEval 0.7.0 grader/stat/flake fixtures (MEASURED)
+- `evaltrim benchmark competitive --format json --competitor <name> --write-docs`
+- Status **GAPS REMAIN**: Promptfoo/DeepEval/Inspect/EvalView unreproduced; no fabricated numbers
+
 - Broader graders: numeric tolerance, set equality, JSON path, subsequence, required/forbidden tools, max steps, state predicates, LCS/strict aliases; `register_grader` documented
 - Three-tier semantic (lexical / local hashing / optional encoder) with per-pair confidence; hard-negative clause penalty
 - `evaltrim replay --compare` human-readable trajectory diffs (terminal/JSON/Markdown)

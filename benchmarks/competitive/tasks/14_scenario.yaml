@@ -1,0 +1,8 @@
+id: 14_scenario
+version: 1
+input: Same as 05_multiturn (declarative scenario YAML)
+expected_behavior: Declarative replay with branch skip
+measurable_metric: correctness, replayability
+methodology: load_scenario + replay_scenario
+pass_fail: passed true
+comparable_tools: [evaltrim]

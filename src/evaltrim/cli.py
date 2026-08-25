@@ -282,14 +282,29 @@ def maintain(
 def benchmark(
     path: Path = typer.Argument(
         Path("benchmarks"),
-        help="Benchmark directory or a single suite.yaml",
+        help="Benchmark directory, a suite.yaml, or 'competitive'",
     ),
     format: str = typer.Option("markdown", "--format"),
     output: Path | None = typer.Option(None, "--output", "-o"),
     scale: str | None = typer.Option(None, "--scale", help="Comma-separated sizes, e.g. 100,500,1000"),
+    competitor: str | None = typer.Option(None, "--competitor", help="Restrict table notes toward one competitor name"),
+    write_docs: bool = typer.Option(False, "--write-docs", help="Rewrite docs/competitive-*.md from this run"),
 ) -> None:
-    """Score constructed suites against ground-truth metadata."""
+    """Score constructed suites, or run the competitive verification harness."""
     try:
+        if path.name == "competitive" or path.as_posix().rstrip("/").endswith("benchmarks/competitive"):
+            from evaltrim.competitive import render_results_markdown, run_competitive_harness
+
+            sizes = [int(x) for x in scale.split(",") if x.strip()] if scale else [100, 500]
+            payload = run_competitive_harness(scale=sizes, competitor=competitor, write_docs=write_docs)
+            if format == "json":
+                import json
+
+                text = json.dumps(payload, indent=2, default=str)
+            else:
+                text = render_results_markdown(payload)
+            _write(text, output)
+            return
         if path.is_file():
             payload = {"benchmarks": [run_benchmark(path, path.parent / "benchmark_metadata.yaml")]}
         else:
@@ -1042,11 +1057,17 @@ def compress_failures_cmd(
 @app.command("competitive-benchmark")
 def competitive_benchmark_cmd(
     format: str = typer.Option("json", "--format"),
+    competitor: str | None = typer.Option(None, "--competitor"),
+    scale: str | None = typer.Option(None, "--scale"),
 ) -> None:
-    """Run the in-repo competitive harness. Competitor cells stay UNMEASURED unless reproduced."""
-    from evaltrim.competitive import run_competitive_harness
+    """Alias for `evaltrim benchmark competitive`. Competitor cells stay UNMEASURED unless reproduced."""
+    from evaltrim.competitive import render_results_markdown, run_competitive_harness
 
-    payload = run_competitive_harness()
+    sizes = [int(x) for x in scale.split(",") if x.strip()] if scale else [100, 500]
+    payload = run_competitive_harness(scale=sizes, competitor=competitor)
+    if format == "markdown":
+        console.print(render_results_markdown(payload))
+        return
     _emit_json("competitive-benchmark", payload)
 
 

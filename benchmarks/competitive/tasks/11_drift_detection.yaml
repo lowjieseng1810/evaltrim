@@ -1,0 +1,9 @@
+id: 11_drift_detection
+version: 1
+input: Unchanged, output change, tool change, trajectory change, provider error, timeout, oracle change
+expected_behavior: Provider error is not CONFIRMED_REGRESSION
+measurable_metric: classification correctness, false confirmed regressions
+methodology: classify_run_delta fixtures
+pass_fail: provider_error class != CONFIRMED_REGRESSION
+comparable_tools: [evaltrim]
+note: AgentEval compare is score Welch, not provider-error taxonomy — not the same task

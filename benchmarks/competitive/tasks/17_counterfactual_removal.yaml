@@ -1,0 +1,8 @@
+id: 17_counterfactual_removal
+version: 1
+input: Critical vs duplicate test ids
+expected_behavior: Removing a unique critical is not SAFE_TO_RETIRE
+measurable_metric: retirement safety
+methodology: simulate-remove / analyze recommendations
+pass_fail: unsafe_retirements empty on constructed suites
+comparable_tools: [evaltrim]

@@ -1,0 +1,8 @@
+id: 16_unique_witness
+version: 1
+input: Constructed suite unique-witness labels
+expected_behavior: Predicted unique witnesses match metadata
+measurable_metric: unique witness precision/recall
+methodology: analyze_suite witnesses vs expected_unique_witnesses
+pass_fail: precision and recall recorded; 1.0 on constructed suites
+comparable_tools: [evaltrim]

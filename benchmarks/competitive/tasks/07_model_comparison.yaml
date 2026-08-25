@@ -1,0 +1,9 @@
+id: 07_model_comparison
+version: 1
+input: Two recorded experiment case lists (model A vs B)
+expected_behavior: Deterministic compare + fingerprint cache hit on repeat
+measurable_metric: reproducibility, cache hit
+methodology: evaltrim.experiments.compare_experiments on recorded cases (no live API)
+pass_fail: second call cache=hit and verdict identical
+comparable_tools: [evaltrim]
+note: Hosted experiment UIs NOT DIRECTLY COMPARABLE

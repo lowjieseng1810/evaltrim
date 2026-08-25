@@ -1,0 +1,8 @@
+id: 03_tool_args
+version: 1
+input: Tool name presence plus argument equality
+expected_behavior: Name checks comparable; argument equality only where offered
+measurable_metric: tool-name accuracy; tool-args accuracy where offered
+methodology: AgentEval tool-check names only (0.7.0). EvalTrim tool_call + tool_args
+pass_fail: name cases match gold; args marked evaltrim_only if competitor lacks API
+comparable_tools: [evaltrim, agenteval]

@@ -1,0 +1,8 @@
+id: 20_large_scale
+version: 1
+input: generate_scale_suite n in {100,500,1000,5000,10000}
+expected_behavior: Completes with recorded runtime/memory/pairs
+measurable_metric: runtime, peak MiB, candidate pairs, simulations, cache
+methodology: run_scale_benchmark; competitors UNMEASURED on this generator
+pass_fail: row emitted per n (not a quality pass)
+comparable_tools: [evaltrim]

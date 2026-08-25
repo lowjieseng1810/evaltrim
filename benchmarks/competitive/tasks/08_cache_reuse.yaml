@@ -1,0 +1,8 @@
+id: 08_cache_reuse
+version: 1
+input: Identical experiment pair compared twice
+expected_behavior: Second comparison is a cache hit
+measurable_metric: cache hit rate (1.0 on identical replay)
+methodology: SQLite KV fingerprint in compare_experiments
+pass_fail: cache hit on second call
+comparable_tools: [evaltrim]

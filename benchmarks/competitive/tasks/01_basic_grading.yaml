@@ -1,0 +1,8 @@
+id: 01_basic_grading
+version: 1
+input: Shared exact/contains/regex fixtures in fixtures/grader_cases.yaml
+expected_behavior: Both tools classify gold pass/fail cases correctly using their recommended APIs
+measurable_metric: classification accuracy, precision, recall, F1
+methodology: In-process graders; no live model
+pass_fail: accuracy == 1.0 on scored exact/contains/regex gold cases
+comparable_tools: [evaltrim, agenteval]

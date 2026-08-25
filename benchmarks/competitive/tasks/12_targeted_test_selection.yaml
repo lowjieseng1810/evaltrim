@@ -1,0 +1,8 @@
+id: 12_targeted_test_selection
+version: 1
+input: Suite with provenance_files pointing at refund.py; change path refund.py
+expected_behavior: Provenance-linked tests selected
+measurable_metric: selection recall on labeled direct hits
+methodology: impacted_tests
+pass_fail: labeled direct test is selected
+comparable_tools: [evaltrim]

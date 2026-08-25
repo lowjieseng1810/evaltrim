@@ -1,0 +1,8 @@
+id: 19_failure_compression
+version: 1
+input: Duplicate production failure records
+expected_behavior: Duplicates compress to fewer candidate families
+measurable_metric: compression ratio, unique families
+methodology: compress_production_failures
+pass_fail: duplicate inputs yield fewer families than raw records
+comparable_tools: [evaltrim]

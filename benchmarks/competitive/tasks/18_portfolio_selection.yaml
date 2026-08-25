@@ -1,0 +1,8 @@
+id: 18_portfolio_selection
+version: 1
+input: Analyzed suite with max_tests budget
+expected_behavior: Critical witnesses retained under budget
+measurable_metric: critical retained, runtime
+methodology: select_portfolio
+pass_fail: every unique critical witness remains in selected set when budget allows
+comparable_tools: [evaltrim]

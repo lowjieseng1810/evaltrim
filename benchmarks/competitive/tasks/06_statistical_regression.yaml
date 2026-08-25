@@ -1,0 +1,10 @@
+id: 06_statistical_regression
+version: 1
+input: Identical n=20 scores vs mean-shifted n=20 scores
+expected_behavior: No false regression on identical samples; detect large mean drop
+measurable_metric: false confirmed regression, detection of mean shift
+methodology: |
+  EvalTrim compare_samples (Welch + Cohen d + practical threshold).
+  AgentEval compare_runs (Welch; any significant drop is REGRESSED at threshold 0).
+pass_fail: identical → no regression flag; large drop → detected
+comparable_tools: [evaltrim, agenteval]

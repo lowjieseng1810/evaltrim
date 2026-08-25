@@ -1,0 +1,9 @@
+id: 15_suite_minimization
+version: 1
+input: Constructed suites coding / customer_support / shopping with labeled redundant groups and criticals
+expected_behavior: Identify redundancy, preserve unique criticals, never unsafe RETIRE, evidence JSON
+measurable_metric: redundancy P/R, false retirement, critical coverage, explanation completeness
+methodology: run_benchmark vs immutable benchmark_metadata.yaml
+pass_fail: retirement_safety_rate == 1.0 and critical_coverage == 1.0
+comparable_tools: [evaltrim]
+note: AgentEval/Promptfoo/DeepEval/Inspect do not expose equivalent counterfactual-safe retirement

@@ -1,0 +1,8 @@
+id: 02_json_schema
+version: 1
+input: Minimal JSON Schema object with required boolean field
+expected_behavior: Valid JSON passes; missing field and non-JSON fail
+measurable_metric: accuracy
+methodology: EvalTrim json/json_schema subset; AgentEval jsonschema Draft validation
+pass_fail: all three gold cases match
+comparable_tools: [evaltrim, agenteval]

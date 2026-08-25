@@ -1,0 +1,8 @@
+id: 09_replay
+version: 1
+input: Saved recording of exact-match case
+expected_behavior: Replay re-grades the same output to the same pass/fail
+measurable_metric: replay correctness, determinism
+methodology: save_recording / replay_recording
+pass_fail: replay passed == original passed
+comparable_tools: [evaltrim]

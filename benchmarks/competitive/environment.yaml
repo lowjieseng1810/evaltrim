@@ -1,0 +1,139 @@
+# Competitive verification environment lock. Do not compare versions without this file.
+schema_version: 1
+benchmark_date: "2026-08-25"
+benchmark_date_utc: "2026-08-25T22:56:01Z"
+os:
+  sysname: Linux
+  release: 6.12.94+
+  machine: x86_64
+  platform_note: "Linux cursor 6.12.94+ SMP PREEMPT_DYNAMIC"
+cpu:
+  model: "Intel(R) Xeon(R) Processor"
+  logical_cpus: 4
+memory:
+  total_gib: 15
+python:
+  version: "3.12.3"
+  implementation: CPython
+node:
+  version: "v22.14.0"
+  npm: "10.9.7"
+  note: "Promptfoo 0.122.0 engines.node requires >=22.22.0; this host cannot run that release."
+install_method:
+  evaltrim: "PYTHONPATH=src (in-repo package)"
+  competitors: "pip install --target /tmp/comp-pkgs (no python3-venv on image)"
+network:
+  egress_restricted: false
+  default_evaltrim_network: false
+  api_keys_used: []
+  hosted_backend_required_for_evaltrim: false
+  telemetry_default: none
+hardware_label: "4× Xeon, 15 GiB RAM, Linux x86_64"
+
+competitors:
+  agenteval:
+    display_name: AgentEval
+    repository: https://github.com/agentkitai/agenteval
+    pypi_package: agentevalkit
+    locked_version: "0.7.0"
+    import_path: agenteval
+    installation: "pip install --target /tmp/comp-pkgs agentevalkit==0.7.0"
+    runtime: Python 3.12.3
+    dependencies_installed:
+      - agentevalkit==0.7.0
+      - jsonschema==4.26.0
+      - pyyaml
+      - click
+      - httpx
+    extras_not_installed:
+      - stats (scipy)
+      - semantic (sentence-transformers)
+    network_behavior: "llm-judge and semantic extras need network/models; not used in this run"
+    external_api_requirements: "OPENAI_API_KEY only for llm-judge (not executed)"
+    shipped_graders:
+      - exact
+      - contains
+      - regex
+      - tool-check
+      - llm-judge
+      - custom
+      - json_schema
+      - semantic
+      - latency
+      - cost
+    advertised_on_github_main_2026_08_25:
+      grader_count: 11
+      includes_trajectory: true
+      source: https://github.com/agentkitai/agenteval/blob/main/README.md
+    advertised_on_pypi_0_7_0:
+      grader_count: 10
+      includes_trajectory: false
+      note: "PyPI 0.7.0 README and graders/__init__.py list 10 graders; no trajectory module in the wheel."
+    reproduced: true
+    reproduction_scope: "in-process graders, Welch compare_runs, flaky aggregate_multi_run"
+
+  promptfoo:
+    display_name: Promptfoo
+    repository: https://github.com/promptfoo/promptfoo
+    locked_version_attempted_latest: "0.122.0"
+    installation_attempted: "npm install -g promptfoo@0.122.0"
+    runtime_required_by_0_122_0: "Node >=22.22.0"
+    host_node: "v22.14.0"
+    reproduced: false
+    failure: "engine mismatch — CLI did not run"
+    fallback_version_attempted: "0.120.0"
+    fallback_failure: "Database migration failed: Can't find meta/_journal.json (drizzle migrator)"
+    redteam_plugins_documented: 157
+    redteam_plugin_source: https://www.promptfoo.dev/docs/red-team/plugins/
+    redteam_plugin_count_kind: "documented catalog size, not a live CLI count of a running binary"
+    network_behavior: "May call external providers for generation/grading depending on config"
+    external_api_requirements: "Provider keys when not using local providers"
+
+  deepeval:
+    display_name: DeepEval
+    repository: https://github.com/confident-ai/deepeval
+    pypi_package: deepeval
+    locked_version: "not installed"
+    pypi_latest_observed: "4.2.0"
+    reproduced: false
+    failure: "Not installed in this run (avoid pulling optional LLM/tracing stacks). No fabricated metrics."
+
+  inspect_ai:
+    display_name: Inspect AI
+    repository: https://github.com/UKGovernmentBEIS/inspect_ai
+    pypi_package: inspect-ai
+    locked_version: "not installed"
+    pypi_latest_observed: "0.3.260"
+    reproduced: false
+    failure: "Not installed in this run. No fabricated metrics."
+
+  evalview:
+    display_name: EvalView
+    repository: https://github.com/hidai25/eval-view
+    locked_version: "not installed"
+    reproduced: false
+    failure: "No local CLI executed. Trajectory snapshot UX documented only."
+
+  vercel_agent_eval:
+    display_name: Vercel agent-eval
+    repository: https://github.com/vercel-labs/agent-eval
+    locked_version: "not installed"
+    reproduced: false
+    comparability: NOT_DIRECTLY_COMPARABLE
+    reason: "Coding-agent sandbox / TypeScript experiment runner; not the same job as local eval-suite maintenance."
+
+  agentevalhq:
+    display_name: AgentEvalHQ
+    repository: "public agent-eval collection (GitHub)"
+    locked_version: "not installed"
+    reproduced: false
+
+  langfuse:
+    comparability: NOT_DIRECTLY_COMPARABLE
+    reason: "Hosted observability/UI is the primary product surface."
+  phoenix:
+    comparability: NOT_DIRECTLY_COMPARABLE
+    reason: "Hosted/local tracing UI; not scored as a local eval-control-plane peer."
+  braintrust:
+    comparability: NOT_DIRECTLY_COMPARABLE
+    reason: "Hosted experiment platform."

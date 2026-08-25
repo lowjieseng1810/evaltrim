@@ -1,0 +1,12 @@
+id: 13_redteam
+version: 1
+input: Common subset families (injection, indirect injection, tool misuse, authz, leakage, destructive, policy, malicious tool output)
+expected_behavior: Local heuristic probes detect labeled attacks without FP on clean probes
+measurable_metric: detection rate, false positives, reproducibility
+methodology: evaltrim.security.evaluate_security — LOCAL heuristics, not Promptfoo plugins
+catalog_breadth_separate: |
+  Promptfoo documented plugin count 157 (docs, 2026-08-25). That is CATALOG BREADTH,
+  not detection quality on this fixture. Promptfoo CLI was not executed.
+pass_fail: detection_rate and false_positives recorded; do not compare catalog size to detection
+comparable_tools: [evaltrim]
+promptfoo: UNMEASURED

@@ -65,6 +65,9 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["B008", "UP042"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/evaltrim/competitive.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true

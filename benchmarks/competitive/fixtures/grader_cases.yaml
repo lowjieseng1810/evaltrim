@@ -1,0 +1,132 @@
+# Shared grader fixtures. Gold labels apply only where both tools expose the same check.
+# version: fixture schema 1
+version: 1
+methodology: |
+  Each case is graded by EvalTrim grade_record and, when AgentEval 0.7.0 exposes
+  an equivalent grader, by AgentEval get_grader(...).grade(...).
+  Contains: EvalTrim is case-insensitive; AgentEval is case-sensitive.
+  Regex: EvalTrim always IGNORECASE; AgentEval flags default to none.
+  Latency/cost missing values: EvalTrim skips; AgentEval fails.
+  Those semantic differences are recorded separately and excluded from
+  common-subset accuracy.
+pass_fail: "predicted.passed == gold for scored cases"
+cases:
+  - id: exact_pass
+    family: exact
+    gold: true
+    text: "Hello world"
+    expected: "Hello world"
+  - id: exact_fail
+    family: exact
+    gold: false
+    text: "Hello world"
+    expected: "Goodbye"
+  - id: contains_pass
+    family: contains
+    gold: true
+    text: "The capital is Paris."
+    needle: "Paris"
+  - id: contains_fail
+    family: contains
+    gold: false
+    text: "The capital is Lyon."
+    needle: "Paris"
+  - id: contains_case_divergence
+    family: contains
+    gold: null
+    note: "EvalTrim lowercases; AgentEval does not. Not scored in common subset."
+    text: "the capital is paris."
+    needle: "Paris"
+  - id: regex_pass
+    family: regex
+    gold: true
+    text: "order-42-ok"
+    pattern: "order-\\d+-ok"
+  - id: regex_fail
+    family: regex
+    gold: false
+    text: "order-xx"
+    pattern: "order-\\d+-ok"
+  - id: json_pass
+    family: json_schema
+    gold: true
+    text: '{"ok": true}'
+    schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+      additionalProperties: false
+  - id: json_fail_missing
+    family: json_schema
+    gold: false
+    text: "{}"
+    schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+  - id: json_fail_not_json
+    family: json_schema
+    gold: false
+    text: "not-json"
+    schema:
+      type: object
+      required: [ok]
+  - id: tool_pass
+    family: tool_names
+    gold: true
+    tools: [search, lookup]
+    expected_tools: [search]
+  - id: tool_fail
+    family: tool_names
+    gold: false
+    tools: [search]
+    expected_tools: [refund]
+  - id: tool_args_pass
+    family: tool_args
+    gold: true
+    comparable: evaltrim_only
+    tools:
+      - { name: refund, arguments: { amount: 50 } }
+    equals: { amount: 50 }
+  - id: tool_args_fail
+    family: tool_args
+    gold: false
+    comparable: evaltrim_only
+    tools:
+      - { name: refund, arguments: { amount: 50 } }
+    equals: { amount: 500 }
+  - id: trajectory_pass
+    family: trajectory
+    gold: true
+    comparable: evaltrim_only
+    note: "AgentEval GitHub README advertises trajectory; PyPI 0.7.0 wheel has no trajectory grader."
+    steps: [lookup, refund]
+    order: [lookup, refund]
+  - id: trajectory_fail
+    family: trajectory
+    gold: false
+    comparable: evaltrim_only
+    steps: [refund]
+    order: [lookup, refund]
+  - id: latency_pass
+    family: latency
+    gold: true
+    latency_ms: 100
+    max_ms: 200
+  - id: latency_fail
+    family: latency
+    gold: false
+    latency_ms: 500
+    max_ms: 200
+  - id: cost_pass
+    family: cost
+    gold: true
+    cost_usd: 0.01
+    max_usd: 0.10
+  - id: cost_fail
+    family: cost
+    gold: false
+    cost_usd: 1.0
+    max_usd: 0.10

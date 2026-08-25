@@ -77,6 +77,8 @@ def run_all_benchmarks(root: Path) -> dict[str, Any]:
     suites = sorted(root.glob("*/suite.yaml"))
     results = []
     for suite_path in suites:
+        if suite_path.parent.name == "competitive":
+            continue
         results.append(run_benchmark(suite_path, suite_path.parent / "benchmark_metadata.yaml"))
     return {
         "benchmarks": results,

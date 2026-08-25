@@ -1,0 +1,8 @@
+id: 10_flaky_detection
+version: 1
+input: Synthetic histories labeled STABLE, DEGRADED, FLAKY, ENVIRONMENTAL
+expected_behavior: Four-class labels for EvalTrim; AgentEval binary is_flaky only
+measurable_metric: 4-class accuracy (EvalTrim); binary flaky accuracy (AgentEval)
+methodology: classify_flake vs aggregate_multi_run
+pass_fail: EvalTrim 4/4 on constructed labels; AgentEval scored only on binary gold
+comparable_tools: [evaltrim, agenteval]

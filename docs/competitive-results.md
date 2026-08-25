@@ -1,52 +1,78 @@
 # Competitive results
 
-EvalTrim **0.9.0**.
+EvalTrim **0.9.0**. Benchmark date: 2026-08-25.
 
-EvalTrim numbers are measured in this process. Competitor columns are UNMEASURED unless a public benchmark was reproduced in benchmarks/competitive/. Do not treat UNMEASURED as a win.
+MEASURED competitor cells come from in-process AgentEval 0.7.0 on this machine. UNMEASURED means the tool was not successfully executed. NOT DIRECTLY COMPARABLE means hosted/UI or a different job. Do not treat UNMEASURED as an EvalTrim win.
 
-Internal maturity labels (Parity / Strong parity / Leading / Not comparable) live in `docs/internal-scorecard.md` and `docs/competitive-benchmark.md`. They are not marketing claims.
+**COMPETITIVE STATUS: GAPS REMAIN**
 
-Constructed-suite precision/recall/F1/retirement safety/critical coverage remain **1.0** on coding, customer_support, and shopping (immutable metadata). Scale: 5k **38.94s**, 10k **56.75s**. Competitor runtime on the same generator: **UNMEASURED**.
+PARITY — INCOMPLETE HEAD-TO-HEAD DATA
 
-EvalTrim numbers are measured in this process. Competitor columns are UNMEASURED unless a public benchmark was reproduced in benchmarks/competitive/. Do not treat UNMEASURED as a win.
+On the AgentEval overlapping grader subset, accuracy tied at 1.0. That is not a superiority claim.
 
-| Metric | EvalTrim | Competitor | Winner | Method | Notes |
-| --- | --- | --- | --- | --- | --- |
-| constructed_redundancy_precision_min | 1.0 | UNMEASURED | UNMEASURED | constructed suites | Head-to-head competitor value not reproduced in this run. |
-| constructed_redundancy_recall_min | 1.0 | UNMEASURED | UNMEASURED | constructed suites | Head-to-head competitor value not reproduced in this run. |
-| retirement_safety_min | 1.0 | UNMEASURED | UNMEASURED | constructed suites | Head-to-head competitor value not reproduced in this run. |
-| critical_coverage_min | 1.0 | UNMEASURED | UNMEASURED | constructed suites | Head-to-head competitor value not reproduced in this run. |
-| grader_plugin_count | 15 | UNMEASURED | UNMEASURED | registered grader classes | Head-to-head competitor value not reproduced in this run. |
-| json_schema_grader_pass | 1.0 | UNMEASURED | UNMEASURED | local fixture | Head-to-head competitor value not reproduced in this run. |
-| unchanged_classification | 1.0 | UNMEASURED | UNMEASURED | identical runs | Head-to-head competitor value not reproduced in this run. |
-| provider_error_not_confirmed_regression | 1.0 | UNMEASURED | UNMEASURED | provider_error fixture | Head-to-head competitor value not reproduced in this run. |
-| environmental_flake_class | 1.0 | UNMEASURED | UNMEASURED | timeout/provider outcomes | Head-to-head competitor value not reproduced in this run. |
-| false_statistical_regression_rate | 1.0 | UNMEASURED | UNMEASURED | identical samples must not flag | Head-to-head competitor value not reproduced in this run. |
-| detect_mean_shift | 1.0 | UNMEASURED | UNMEASURED | mean +3 on n=20 | Head-to-head competitor value not reproduced in this run. |
-| mutation_score | 0.8571 | UNMEASURED | UNMEASURED | constructed grader probes | Head-to-head competitor value not reproduced in this run. |
-| security_detection_rate | 1.0 | UNMEASURED | UNMEASURED | local family probes | Head-to-head competitor value not reproduced in this run. |
-| security_false_positives | 0 | UNMEASURED | UNMEASURED | local family probes | Head-to-head competitor value not reproduced in this run. |
-| default_network_required | 0.0 | UNMEASURED | UNMEASURED | 0 means no network by default | Head-to-head competitor value not reproduced in this run. |
-| json_contract_version | 1.0 | UNMEASURED | UNMEASURED | machine-readable contract | Head-to-head competitor value not reproduced in this run. |
+## Head-to-head table
 
-## Scale (EvalTrim only)
+| Capability | Metric | EvalTrim | AgentEval | Promptfoo | DeepEval | Inspect | EvalView | Vercel | Winner | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 01_basic_grading | common_subset_accuracy | 1; MEASURED; v0.9.0 | 1; MEASURED; v0.7.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | TIE | fixtures/grader_cases.yaml; in-process; 2026-08-25; 4×Xeon 15GiB; AgentEval 0.7.0 |
+| 02_json_schema | accuracy_on_three_gold_cases | 1; MEASURED; v0.9.0 | 1; MEASURED; v0.7.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | TIE | fixtures/grader_cases.yaml; in-process; 2026-08-25; 4×Xeon 15GiB; AgentEval 0.7.0; AgentEval uses jsonschema library |
+| 03_tool_args | argument_equality | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | AgentEval 0.7.0 tool-check is names only |
+| 04_trajectory | subsequence_accuracy | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | GitHub README lists trajectory; wheel 0.7.0 does not ship it |
+| 05_multiturn | scenario_passed | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | NOT DIRECTLY COMPARABLE | UNMEASURED | examples/scenario_refund.yaml replay_scenario |
+| 06_statistical_regression | false_regression_on_identical | 1; MEASURED; v0.9.0 | 1; MEASURED; v0.7.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | TIE | n=20 scores of 1.0 vs 1.0; EvalTrim compare_samples; AgentEval compare_runs |
+| 06_statistical_regression | detect_mean_drop_1_to_0 | 1; MEASURED; v0.9.0 | 1; MEASURED; v0.7.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | TIE | Welch; methods documented in docs/competitive-methodology.md |
+| 07_model_comparison | recorded_experiment_cache_hit | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | compare_experiments fingerprint KV; hosted experiment UIs NDC |
+| 08_cache_reuse | cache_hit_rate_identical_compare | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | second compare_experiments call |
+| 09_replay | replay_correctness | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | save_recording/replay_recording tempfile |
+| 10_flaky_detection | four_class_accuracy | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | AgentEval binary is_flaky only |
+| 10_flaky_detection | binary_mixed_accuracy | 1; MEASURED; v0.9.0; EvalTrim 4-class mapped to mixed vs stable | 1; MEASURED; v0.7.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | TIE | STABLE not flaky; others mixed. Mapping documented. |
+| 11_drift_detection | provider_error_not_confirmed_regression | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | classify_run_delta; AgentEval has no provider-error class |
+| 12_targeted_test_selection | provenance_recall_fixture | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | impacted_tests(['src/refund.py']) |
+| 13_redteam | local_probe_detection_rate | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | evaltrim.security.evaluate_security; Promptfoo CLI not executed |
+| 13_redteam | catalog_breadth | local family probes (not a plugin catalog) | UNMEASURED | 157 plugins DOCUMENTED (not CLI-counted) https://www.promptfoo.dev/docs/red-team/plugins/ | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | Catalog size ≠ detection quality on the common subset |
+| 13_redteam | false_positives | 0; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | Lower is better; local probes only |
+| 14_scenario | replayability | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | EchoExpectedAdapter scenario |
+| 14_sandbox | isolation_level | LOCAL PROCESS SANDBOX (not container, not VM) | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | NOT DIRECTLY COMPARABLE | UNMEASURED | Do not equate subprocess sandbox with VM |
+| 15_suite_minimization | redundancy_precision_min | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | constructed suites; immutable metadata |
+| 15_suite_minimization | retirement_safety_min | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | false retirement must stay 0 on labeled criticals |
+| 15_suite_minimization | critical_coverage_min | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | constructed suites |
+| 16_unique_witness | unique_witness_precision_min | 0.8333; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | benchmark_metadata.yaml |
+| 17_counterfactual_removal | false_retirement_rate_max | 0; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | lower is better; 0.0 on constructed |
+| 18_portfolio_selection | critical_witness_retention_heuristic | 1; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | select_portfolio on demo suite |
+| 19_failure_compression | families_from_three_records | 2; MEASURED; v0.9.0 | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | Capability not offered / not directly comparable | NOT DIRECTLY COMPARABLE | UNMEASURED | compress_production_failures; 2 families expected |
+| 20_large_scale | runtime_same_generator | MEASURED (see scale table) | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | Competitors not run on generate_scale_suite |
+| privacy_local_first | default_network_required | 0; MEASURED; v0.9.0; 0=no | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | NOT DIRECTLY COMPARABLE | UNMEASURED | EvalTrim default path has no network |
+| mutation | constructed_mutation_score | 0.8571; MEASURED; v0.9.0 | Capability not offered / not directly comparable | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | evaltrim.intelligence.mutation |
+| dx_runner | dry_run_and_smoke_and_parallel | 1; MEASURED; v0.9.0 | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | UNMEASURED | run_suite dry_run/smoke/workers; competitor runner DX UNMEASURED |
 
-Harness (this file, latest code):
+## Scorecard (EvalTrim self-measurement; not a competitor deficit)
 
-- n=100 t=2.3953s mib=8.17 pairs=4950
-- n=500 t=9.9603s mib=70.15 pairs=19856
+- A General Evaluation: **10.0 / 10**
+- B Regression/Developer Workflow: **10.0 / 10**
+- C Evaluation Intelligence: **9.5577 / 10**
+- Overall unweighted mean: **9.8526 / 10**
+- Weighted: `{'equal': 9.8526, 'intelligence_heavier': 9.8231, 'eval_workflow_heavier': 9.9115}`
+- Weights: `{'equal': [0.3333333333333333, 0.3333333333333333, 0.3333333333333333], 'intelligence_heavier': [0.3, 0.3, 0.4], 'eval_workflow_heavier': [0.4, 0.4, 0.2]}`
+- Sensitivity spread: 0.0885
 
-Dedicated cold run (`EVALTRIM_NO_CACHE=1`, DF-capped blocking; same generator as v0.6):
+Scores are EvalTrim self-measurements on fixtures (0–10). They are not a claim that competitors scored lower on UNMEASURED cells. AgentEval overlapping grader accuracy: 1.0.
 
-| n | runtime_s | peak MiB | pairs | similarity_s | removal_s |
-| --- | --- | --- | --- | --- | --- |
-| 100 | 2.65 | 8.15 | 4950 | 2.50 | 0.09 |
-| 500 | 11.51 | 72.0 | 19856 | 9.61 | 1.42 |
-| 1000 | 19.44 | 100.9 | 27379 | 13.78 | 4.40 |
-| 5000 | 133.38 | 257.1 | 59840 | 30.60 | 97.66 |
-| 10000 | 436.84 | 408.6 | 76205 | 38.33 | 387.45 |
+## Scale (EvalTrim generator; competitors UNMEASURED)
 
-v0.6.0 5k was **249.3s** / 174694 pairs. 10k was not completed. Competitor runtime on this generator: **UNMEASURED**.
+These rows are measured **in the same process** as the rest of the harness (AgentEval imported), with `EVALTRIM_NO_CACHE=1` for the scale loop. Peak tracemalloc can still differ from a dedicated process in `docs/benchmark.md`. 
+| n | runtime_s | peak MiB | pairs | simulations |
+| --- | --- | --- | --- | --- |
+| 100 | 5.8196 | 9.6 | 4950 | 1.0 |
+| 500 | 11.6522 | 72.14 | 19856 | 1.0 |
+| 1000 | 16.8477 | 101.06 | 27379 | 1.0 |
+| 5000 | 40.1215 | 257.5 | 59840 | 1.0 |
+| 10000 | 57.0143 | 409.17 | 76205 | 1.0 |
 
-10k wall time is dominated by per-test counterfactual simulation (~387s), not pair scoring.
+## Reproduction
+
+Reproduced: ['agentevalkit==0.7.0']
+
+Not reproducible: [{'name': 'promptfoo', 'attempted': ['0.122.0', '0.120.0'], 'reason': 'engine mismatch — CLI did not run'}, {'name': 'deepeval', 'reason': 'Not installed; no metrics fabricated'}, {'name': 'inspect_ai', 'reason': 'Not installed; no metrics fabricated'}, {'name': 'evalview', 'reason': 'Not installed; no metrics fabricated'}, {'name': 'vercel_agent_eval', 'reason': 'NOT DIRECTLY COMPARABLE'}, {'name': 'agentevalhq', 'reason': 'Not installed'}]
+
+Hosted platforms: Langfuse / Phoenix / Braintrust = **NOT DIRECTLY COMPARABLE**.
 

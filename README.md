@@ -8,7 +8,7 @@ EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace 
 
 It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-Current version: **0.9.0** (beta public API — not 1.0). Competitive status: **PARITY** on unreproduced competitor metrics (those stay **UNMEASURED**). This is not a public “9/10 product” claim.
+Current version: **0.9.0** (beta public API — not 1.0). Competitive verification (2026-08-25): **GAPS REMAIN**. AgentEval 0.7.0 was measured on a grader/stat/flake subset. Promptfoo, DeepEval, Inspect AI, and EvalView were **not** reproduced. Unreproduced cells stay **UNMEASURED** and are not wins.
 
 ## First run
 
@@ -73,7 +73,7 @@ The default merge bar is **not** lowered globally. Hard negatives that share voc
 
 Every important command accepts `--format json` with stable field names:
 
-`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `gate` · `doctor` · `experiment` · `experiment-matrix` · `redteam` · `mutate` · `cluster` · `competitive-benchmark`
+`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `benchmark competitive` · `gate` · `doctor` · `experiment` · `experiment-matrix` · `redteam` · `mutate` · `cluster` · `competitive-benchmark`
 
 JSON objects include `contract_version` (`1.0`). Extra keys may appear.
 
@@ -131,9 +131,11 @@ v0.6.0 on the same harness was already precision/recall/safety/critical coverage
 
 ## Competitive comparison
 
-See [docs/competitive-benchmark.md](docs/competitive-benchmark.md) and [docs/competitive-results.md](docs/competitive-results.md).
+See [docs/competitive-benchmark.md](docs/competitive-benchmark.md), [docs/competitive-results.md](docs/competitive-results.md), and [docs/competitive-methodology.md](docs/competitive-methodology.md).
 
-Competitor columns that were not reproduced in-process are **UNMEASURED**. EvalTrim is **not** declared superior to EvalView snapshots, Promptfoo red-team catalogs, Vercel coding sandboxes, or hosted experiment UIs.
+Command: `evaltrim benchmark competitive --format json`
+
+Competitor columns that were not reproduced in-process are **UNMEASURED**. EvalTrim is **not** declared superior to Promptfoo red-team catalogs, EvalView snapshots, Vercel coding sandboxes, or hosted experiment UIs.
 
 | Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
 | --- | --- | --- | --- | --- | --- | --- |
