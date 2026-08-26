@@ -19,7 +19,7 @@
   ],
   "critical_coverage": 1.0,
   "evaluation_debt": {
-    "open_item_count": 15
+    "open_item_count": 12
   },
   "suite_health": {
     "composite": 87.1,

@@ -1,189 +1,231 @@
 # EvalTrim
 
-> The Evaluation Control Plane for AI Agents.
+**Prove which AI-agent evals are worth keeping.**
 
-Run. Replay. Compare. Understand. Optimize. Maintain.
+EvalTrim is the evaluation control plane for AI agents.
 
-EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace your agent runtime or a generic eval harness. It sits beside them and answers: which tests are unique, which are redundant, what a removal would break, and what to run after a change.
+Don't just evaluate your agent. Maintain the evaluation system itself.
 
-It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
+It is a **local-first** CLI. It does not replace your agent runtime or a generic eval harness. It sits beside them and answers: which tests are unique, which are redundant, what a removal would break, and what to run after a change. It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW`, each with a serializable evidence ledger.
 
-Current version: **1.0.0**. Competitive verification (2026-08-26): **VERIFIED PARITY ON MEASURED DIMENSIONS**. Common local graders, JSON Schema, numeric tolerance, and the canned-output text red-team subset **tied at 1.0** where both sides were MEASURED. EvalView canned trajectory diffs tied at 1.0. This is **not** “beats all competitors.” 10k scale, Promptfoo plugin-catalog detection, DeepEval LLM judges, EvalView GUI, and competitor DX remain UNMEASURED or NOT DIRECTLY COMPARABLE.
+## Why this exists
 
-## First run
-
-```bash
-pip install -e ".[dev]"
-evaltrim init
-evaltrim analyze evals.yaml
-evaltrim doctor
-```
-
-Windows, macOS, and Linux all use `pathlib` paths. If an optional extra is missing, commands name the package instead of dumping a traceback.
-
-## Three layers
-
-1. **Evaluation** — plugin graders (exact, contains, regex, JSON Schema, semantic, tools, trajectory, latency, TTFT, tokens, cost, custom), record, replay, multi-run statistics, experiment matrix / Pareto.
-2. **Regression Control** — recorded-run classes including `UNCHANGED`, drift attribution (heuristic), watch, impacted tests + safety sample, flakes including `ENVIRONMENTAL`, pre-commit `gate`.
-3. **Evaluation Intelligence** — behavior classes, unique witnesses, counterfactual removal, information gain, mutation score, suite health, evaluation debt, portfolio / Pareto, proof-carrying recommendations.
-
-EvalTrim does not only evaluate the agent. It evaluates and maintains the evaluation system itself.
+AI-agent evaluation suites grow quickly. Paraphrases, stale oracles, flaky history, conflicting expected outputs, and low-value cases accumulate. Deleting a test *feels* cheap until it was the only remaining witness for a critical behavior. EvalTrim makes that loss visible **before** anyone edits the suite.
 
 ## What makes it different
 
-These are complementary to Promptfoo, LangSmith, Braintrust, and similar tools — not a claim of inventing evaluation:
+1. **Unique behavioral witnesses** — the only remaining test for a behavior, boundary, requirement, or failure family.
+2. **Counterfactual removal** — simulate deleting a test and measure coverage that would actually disappear.
+3. **Evidence-backed maintenance** — every recommendation carries overlap, witness loss, and a removal verdict.
+4. **Suite health / evaluation debt** — labeled heuristics for maintainers, not scores you can game.
+5. **Portfolio optimization** — a greedy + 1-opt subset under cost / time / count budgets.
+6. **Production failure compression** — cluster failures into candidate tests; nothing is auto-inserted.
+7. **Local-first execution** — no hosted backend, no telemetry by default.
 
-- **Behavior graph** — tests as coverage over normalized behavior atoms.
-- **Unique witnesses** — the only remaining test for a behavior, boundary, requirement, or failure family.
-- **Counterfactual removal** — simulate deleting a test *before* anyone deletes it.
-- **Suite health** and **evaluation debt** — heuristic diagnostics, not scores you can game.
-- **Evidence ledger** — every recommendation carries similarity, overlap, witness loss, and removal verdict.
-- **Portfolio optimization** — a explainable greedy + 1-opt subset under cost / time / count budgets.
+Similarity may **create candidates**. It does **not** independently authorize `RETIRE`.
 
-Semantic similarity may **create candidates**. It does **not** independently authorize `RETIRE`.
+## Core workflow
 
-## 30-second workflow
-
-```bash
-git clone <this-repo>
-cd evaltrim
-python3 -m pip install -e ".[dev]"
-evaltrim init evals.yaml
-evaltrim analyze evals.yaml
-evaltrim health evals.yaml --format json
-evaltrim regression examples/demo_suite.yaml examples/demo_suite.yaml --format json
-evaltrim maintain evals.yaml
-evaltrim explain privacy-delete --suite examples/demo_suite.yaml
-evaltrim doctor
+```
+Agent → Evaluation → Trace → Behavior → Witnesses → Counterfactual → Evidence → Maintenance
 ```
 
-Use `examples/demo_suite.yaml` if you want a populated suite immediately.
+RUN → RECORD → GRADE → COMPARE → DETECT → EXPLAIN → OPTIMIZE → MAINTAIN
 
-## Semantic matching (honest)
+## What it does
 
-| Mode | How to enable | Network |
+### Evaluate
+
+Plugin graders (exact, contains, regex, JSON Schema, numeric tolerance, tools, trajectories, latency, cost, custom), multi-turn scenarios, statistics, experiment matrix.
+
+### Regress
+
+Snapshots, replay, run classes including `UNCHANGED`, drift notes, flaky history (`ENVIRONMENTAL` vs model flake). A provider error is not a confirmed model regression.
+
+### Understand
+
+Behavior graph, unique witnesses, requirements, oracle health, oracle conflicts.
+
+### Optimize
+
+Suite minimization, information gain, portfolio / Pareto, evaluation debt.
+
+### Maintain
+
+Evidence-backed `KEEP` / `MERGE` / `REVIEW` / `RETIRE`. EvalTrim never rewrites the suite file.
+
+## 30-second demo
+
+```bash
+git clone https://github.com/lowjieseng1810/evaltrim.git
+cd evaltrim
+python3 -m pip install -e ".[dev]"
+evaltrim analyze examples/demo_suite.yaml
+```
+
+Representative output from that command (constructed demo suite, not production traffic):
+
+```
+# EvalTrim Report
+
+## Summary
+
+12 tests analyzed
+5 recommended KEEP
+3 MERGE
+0 RETIRE
+4 REVIEW
+
+Critical behavior coverage:
+100.0%
+
+Unique Witnesses
+
+- `privacy-delete`: condition:destructive, domain:privacy, state:unauthenticated
+- `refund-boundary`: condition:amount_at_limit, condition:policy_boundary, condition:threshold_equality
+```
+
+Full script: [`scripts/demo-public.sh`](scripts/demo-public.sh).
+
+## The key idea
+
+1. **Similarity creates candidates** (paraphrases, near-duplicates).
+2. **Behavioral evidence determines safety** (atoms, requirements, critical flags).
+3. **Counterfactual analysis checks what would actually be lost** if the test disappeared.
+
+A rare lexical token on a duplicate behavior is not a unique witness. Exclusive coverage is.
+
+## Example
+
+On `examples/demo_suite.yaml`:
+
+| Test | Recommendation | Why |
 | --- | --- | --- |
-| **DEFAULT** | nothing | none — normalized tokens, n-grams, rare-token weights, behavior overlap, unique witnesses, counterfactual removal |
-| **OPTIONAL EMBEDDING** | `EVALTRIM_EMBEDDINGS=1` or `config.embeddings_enabled` | none — local hashing encoder (no model download) |
-| **OPTIONAL LLM** | `EVALTRIM_LLM=1` / `config.llm_enabled` plus a provider you configure | only then |
+| `privacy-delete` | **KEEP** | Unique privacy / destructive witness. Removing it drops critical coverage 100% → 80%. Verdict: KEEP. |
+| `refund-002b` | **MERGE** | Near-duplicate of the $700 refund escalation. Removal leaves coverage 100% / 100%. Verdict: SAFE_TO_RETIRE (still not auto-deleted). |
 
-The default merge bar is **not** lowered globally. Hard negatives that share vocabulary but differ in behavior stay unmerged (refund vs refund + store credit).
+```bash
+evaltrim explain privacy-delete --suite examples/demo_suite.yaml
+evaltrim simulate-remove examples/demo_suite.yaml privacy-delete
+evaltrim simulate-remove examples/demo_suite.yaml refund-002b
+```
 
-## Agent-native CLI
+## Measured results
 
-Every important command accepts `--format json` with stable field names:
+Constructed / labeled suites. **Not** production correctness. Ground truth was not rewritten to chase scores. See [docs/benchmark.md](docs/benchmark.md).
 
-`status` · `analyze` · `regression` · `impacted-tests` · `maintain` · `health` · `debt` · `flaky` · `explain` · `benchmark` · `benchmark competitive` · `gate` · `doctor` · `experiment` · `experiment-matrix` · `redteam` · `mutate` · `cluster` · `competitive-benchmark`
+| Metric | Value | Dataset |
+| --- | --- | --- |
+| Unique-witness precision | 1.0 | Labeled constructed suites including `benchmarks/witness_final/` |
+| Unique-witness recall | 1.0 | same |
+| Critical witness recall | 1.0 | same |
+| False critical witnesses | 0 | same |
+| Retirement safety | 1.0 | same + coding / support / shopping |
+| Critical coverage | 1.0 | same |
+| 10k cold runtime | **54.7049s** | Synthetic generator, `EVALTRIM_NO_CACHE=1` |
+| Incremental 10k / 5 changed | **2.0613s** | Pair cache already populated; empty-cache incremental was ~10.4s |
 
-JSON objects include `contract_version` (`1.0`). Extra keys may appear.
+Redundancy P/R/F1 on coding / customer_support / shopping constructed suites: **1.0**.
 
-Exit codes: `0` ok · `2` invalid/missing input · `3` policy/strict · `4` internal.
+## Competitive position
 
-Optional tiny MCP-style adapter (`evaltrim.mcp_adapter.dispatch`): `get_status`, `impacted_tests`, `explain`, `regression_summary`, `suggest_maintenance`. Not required. Not a platform.
+EvalTrim reaches **parity on the measured common evaluation dimensions** and adds an evaluation-suite intelligence layer focused on witness analysis, counterfactual maintenance, and suite optimization.
 
-## Screenshots (actual CLI output)
+Some competitor dimensions remain **UNMEASURED** or **NOT DIRECTLY COMPARABLE** (competitor 10k scale, live Promptfoo plugin catalogs vs detection quality, DeepEval LLM judges, EvalView GUI, hosted SaaS). UNMEASURED is not a win. NOT OFFERED is not a competitor zero.
 
-Generated from this repo’s demo suite. Not mocked numbers.
+Status: **VERIFIED PARITY ON MEASURED DIMENSIONS** — not a claim of universal superiority.
+
+Details: [docs/competitive-results.md](docs/competitive-results.md) · [docs/competitive-methodology.md](docs/competitive-methodology.md) · [docs/limitations.md](docs/limitations.md)
+
+## Screenshots
+
+Generated from the current 1.0.0 CLI on `examples/demo_suite.yaml`. Not mocked numbers.
 
 ### Main CLI
 
-![CLI evaluation summary](docs/images/cli-main.svg)
+![evaltrim analyze](docs/images/01-main-cli.svg)
 
-### Unique witness (why a test is kept)
+### Unique witness
 
-![Unique witness](docs/images/unique-witness.svg)
+![evaltrim explain](docs/images/02-unique-witness.svg)
 
-### Removal simulation (SAFE vs KEEP)
+### Counterfactual removal
 
-![Removal simulation](docs/images/removal-simulation.svg)
+![simulate-remove](docs/images/03-removal-simulation.svg)
 
-### Suite health / evaluation debt
+### Suite health
 
-![Suite health](docs/images/suite-health.svg)
-
-![Evaluation debt](docs/images/evaluation-debt.svg)
+![evaltrim health](docs/images/04-suite-health.svg)
 
 ### Regression
 
-![Regression](docs/images/regression.svg)
+![evaltrim compare](docs/images/05-regression.svg)
 
-### GitHub PR comment (rendered from `--format github`)
+### GitHub PR comment
 
-![GitHub PR comment](docs/images/github-pr-comment.svg)
+![analyze --format github](docs/images/06-github-pr.svg)
 
-### HTML report
+## Architecture
 
-Open [docs/images/report.html](docs/images/report.html).
+```
+CLI
+ → Core evaluation model (records, graders, scenarios)
+ → Traces / history (local SQLite)
+ → Behavior graph
+ → Intelligence engine (witnesses, counterfactuals, portfolio)
+ → Evidence / proof graph
+ → Reports / CI
+```
 
-## Measured quality (v1.0.0)
+## Privacy
 
-Command: `EVALTRIM_NO_CACHE=1 PYTHONPATH=src python3 -m evaltrim.cli benchmark benchmarks`  
-No LLM. Embeddings off. Constructed suites — **not** production traffic. See [docs/benchmark.md](docs/benchmark.md).
+- Local-first. No hosted backend required.
+- No telemetry by default.
+- Optional embeddings / LLM judges run only when you enable them.
+- See [docs/privacy.md](docs/privacy.md) and [docs/network.md](docs/network.md).
 
-Unique-witness precision/recall on labeled constructed suites is ≥ 0.95 with critical witness recall 1.0. Ground truth files were not rewritten to chase scores.
+## Installation
 
-## Competitive comparison
+```bash
+python3 -m pip install -e ".[dev]"
+evaltrim doctor
+```
 
-See [docs/competitive-benchmark.md](docs/competitive-benchmark.md), [docs/competitive-results.md](docs/competitive-results.md), and [docs/competitive-methodology.md](docs/competitive-methodology.md).
+Python 3.11+. Windows, macOS, and Linux. Default path is offline.
 
-Command: `evaltrim benchmark competitive --format json`
+## CI / GitHub Actions
 
-Competitor columns that were not executed for a cell stay **UNMEASURED**. NOT OFFERED is not a competitor failure. EvalTrim is **not** declared superior on catalog size, hosted UIs, or unmeasured 10k competitor scale.
+Workflow: [`.github/workflows/evaltrim.yml`](.github/workflows/evaltrim.yml)
 
-| Suite | Precision | Recall | F1 | Retirement safety | Critical coverage | Suite reduction |
-| --- | --- | --- | --- | --- | --- | --- |
-| coding_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 46% |
-| customer_support | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 25% |
-| shopping_agent | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 40% |
+```yaml
+- run: pip install .
+- run: evaltrim analyze examples/demo_suite.yaml --format github
+```
 
-Recall **before** this pass (v0.4.0, same harness): customer_support **0.875** (missed `parcel is late` / `parcel arrived late`). Precision and retirement safety stayed **1.0**. We did not lower the global merge threshold; normalization + content-token overlap was enough for that pair without collapsing the store-credit hard negative.
+The action writes artifacts and a short PR comment. EvalTrim never deletes tests from the repo.
 
-v0.2.0 recall on smaller suites was coding 0.50 / customer_support 0.40 / shopping 0.25.
-
-## Scale (synthetic suites, no quality labels)
-
-Cold run, `EVALTRIM_NO_CACHE=1`. v0.6.0 5,000-test runtime was **249.3s** with 174k candidate pairs. v0.7 caps inverted-index document frequency and neighbor retrieval on large n.
-
-Latest measured numbers:
-
-| n | runtime | peak MiB | pairs |
-| --- | --- | --- | --- |
-| 100 | 5.42s | 9.6 | 4950 |
-| 500 | 11.17s | 72.1 | 19856 |
-| 1000 | 16.19s | 101.1 | 27379 |
-| 5000 | **38.94s** (was 133.4s in 0.7.0) | 257.5 | 59840 |
-| 10000 | **56.75s** (was 436.8s in 0.7.0) | 409.2 | 76205 |
-
-Details: [docs/benchmark.md](docs/benchmark.md).
-
-## Not guaranteed
-
-- Detecting every unknown behavior
-- Offline semantic similarity is a heuristic, not an embedding model
-- Drift “likely source” is not causal proof
-- Benchmark scores do not imply production correctness
-- Automatic retirement is **never** performed
-- Impacted-test selection is not a complete call graph
-- Optional MCP is a thin dispatcher, not an IDE
-
-Deferred on purpose: IDE plugins, full MCP platform, self-healing, automatic repair, canary/rollback, hosted SaaS.
-
-## Docs
+## Documentation
 
 - [Architecture](docs/architecture.md)
-- [JSON for coding agents](docs/json.md)
-- [Network & privacy](docs/network.md)
-- [Cache & storage](docs/cache.md)
-- [Semantic backends](docs/semantic.md)
-- [MCP adapter](docs/mcp.md)
 - [Removal simulation](docs/removal-simulation.md)
-- [Competitive audit](docs/competitive-benchmark.md)
-- [Taxonomy A–AP](docs/taxonomy.md)
-- [Competitive results](docs/competitive-results.md)
-- [Internal scorecard](docs/internal-scorecard.md) (engineering self-assessment, not a public rating)
+- [Evidence](docs/evidence.md)
+- [Health](docs/health.md)
+- [GitHub Action](docs/github-action.md)
+- [JSON contract](docs/json.md)
+- [Graders](docs/graders.md)
 - [Limitations](docs/limitations.md)
 - [Changelog](CHANGELOG.md)
-- [Release audit](RELEASE_AUDIT.md)
+- [Release 1.0](docs/release-1.0.md)
+- [GitHub copy](docs/github-copy.md)
+
+## Limitations
+
+- Local sandbox is **not** VM / container isolation.
+- LLM judge requires a provider you configure.
+- Some semantic matching remains a heuristic.
+- Some competitor dimensions are unmeasured.
+- No hosted SaaS.
+- No automatic deletion.
 
 ## License
 

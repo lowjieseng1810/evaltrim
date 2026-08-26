@@ -1,8 +1,8 @@
 # Evaluation Debt Report
-Open items: 15
+Open items: 12
 - stale_tests: 2
 - redundant_tests: 3
-- low_value_tests: 4
+- low_value_tests: 1
 - flaky_tests: 0
 - quarantined_tests: 0
 - conflicts: 2

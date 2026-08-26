@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "evaltrim"
 version = "1.0.0"
-description = "The evaluation control plane for AI agents: run, replay, compare, understand, and optimize eval suites."
+description = "The evaluation control plane for AI agents. Unique witnesses, counterfactual removal, evidence-backed suite maintenance."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "EvalTrim contributors" }]
-keywords = ["eval", "agent", "testing", "coverage", "redundancy", "cli"]
+keywords = ["eval", "agent", "testing", "coverage", "redundancy", "cli", "llm", "evaluation"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
@@ -41,8 +41,9 @@ dev = [
 evaltrim = "evaltrim.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/evaltrim/evaltrim"
-Documentation = "https://github.com/evaltrim/evaltrim/tree/main/docs"
+Homepage = "https://github.com/lowjieseng1810/evaltrim"
+Documentation = "https://github.com/lowjieseng1810/evaltrim/tree/main/docs"
+Repository = "https://github.com/lowjieseng1810/evaltrim"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/evaltrim"]

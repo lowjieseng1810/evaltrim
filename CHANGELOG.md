@@ -8,6 +8,7 @@ Final competitive verification pass (evidence lock, not a new feature wave).
 - Isolated Promptfoo 0.122.0 now MEASURED on JSON Schema (`is-json`), numeric abs-tol (javascript), and a canned-output **text** red-team common subset. Tool-plugin catalog remains documented breadth, not detection quality.
 - Shared immutable fixture family under `benchmarks/shared/`. Ground truth was not rewritten after scoring.
 - Competitive status: **VERIFIED PARITY ON MEASURED DIMENSIONS**. Not a claim of beating every competitor on every surface. Competitor 10k scale, EvalView GUI, DeepEval LLM judges, and DX bake-off remain UNMEASURED / NDC.
+- README, screenshots (`docs/images/01-*.svg`), and launch copy. No algorithm or ground-truth changes.
 
 - Unique-witness classifier: coverage uniqueness from counterfactual loss and exclusive signatures, not leftover generic tokens. Critical witness recall 1.0 and false critical witnesses 0 on labeled suites. Labeled suite: `benchmarks/witness/`.
 - `evaltrim portfolio --objective witness` returns a minimum practical witness set (heuristic, not a proven optimum).

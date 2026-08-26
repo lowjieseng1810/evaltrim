@@ -9,5 +9,7 @@ Composite (heuristic): 87.1
 - conflicts: 66.7
 - provenance: 100.0
 - maintainability: 91.7
+- cost_efficiency: 96.2
+- oracle_reliability: 66.7
 Suite health is a local heuristic for maintainers. It is not a statistical 
 guarantee of agent quality.

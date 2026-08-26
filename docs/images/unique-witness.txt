@@ -3,9 +3,3 @@ Unique witness: condition:destructive, domain:privacy, state:unauthenticated
 Critical coverage lost: 0.2
 Counterfactual: KEEP
 Verdict: KEEP
-{'decision': 'KEEP', 'semantic_similarity': 0.0, 'behavior_overlap': 0.0, 
-'unique_witnesses_lost': 3, 'critical_coverage_lost': 0.2, 
-'requirement_coverage_lost': 0, 'historical_failure_contribution': 0.0, 
-'counterfactual_coverage_loss': 0.125, 'counterfactual_status': 'KEEP', 
-'oracle_status': 'TRUSTED', 'notes': ['Only meaningful witness for a critical 
-behavior, or removal loses critical coverage.']}

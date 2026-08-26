@@ -28,3 +28,6 @@ scripts/demo.sh
 - Unique critical witnesses must never `RETIRE`.
 - Do not add hosted SaaS, IDE, or a full MCP platform in this tree.
 - Do not lower the global merge threshold to chase recall.
+- Do not rename the public brand without a documented naming audit (`docs/naming-audit.md`).
+
+Public demo: `scripts/demo-public.sh`. Screenshots: `python3 scripts/generate_demo_screenshots.py`.
