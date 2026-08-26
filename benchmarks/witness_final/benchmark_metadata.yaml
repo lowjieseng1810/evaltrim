@@ -1,0 +1,47 @@
+# Immutable labeled witness ground truth. Do not rewrite to chase scores.
+schema_version: 1
+immutable: true
+suite: witness_final
+expected_redundant_groups:
+  - [f-dup-a, f-dup-b, f-dup-c, f-para-a, f-para-b, f-rare-token]
+  - [f-near-a, f-near-b]
+expected_unique_witnesses:
+  - f-privacy
+  - f-combo
+  - f-delete
+  - f-boundary
+  - f-empty
+  - f-malformed
+  - f-req
+  - f-hist
+  - f-family
+  - f-traj-skip
+  - f-ambiguous
+expected_critical_cases:
+  - f-privacy
+  - f-combo
+  - f-delete
+  - f-boundary
+  - f-req
+  - f-twin-b
+  - f-weak
+  - f-traj-skip
+expected_not_unique:
+  - f-dup-a
+  - f-dup-b
+  - f-dup-c
+  - f-para-a
+  - f-para-b
+  - f-rare-token
+  - f-near-a
+  - f-near-b
+  - f-hardneg
+  - f-twin-a
+  - f-twin-b
+  - f-stale
+  - f-weak
+  - f-traj-base
+notes:
+  - A rare lexical token on a duplicate-behavior case must not create a unique witness.
+  - Hard negatives KEEP via distinctive atoms without being coverage-unique.
+  - Same-input oracle twins are not unique witnesses unless critical coverage is lost.

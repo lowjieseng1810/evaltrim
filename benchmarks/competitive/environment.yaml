@@ -1,6 +1,6 @@
 # Competitive verification environment lock. Do not compare versions without this file.
 schema_version: 1
-benchmark_date: "2026-08-25"
+benchmark_date: "2026-08-26"
 benchmark_date_utc: "2026-08-25T22:56:01Z"
 os:
   sysname: Linux
@@ -82,7 +82,7 @@ competitors:
     host_node: "v22.14.0"
     isolated_node: "v22.22.0"
     reproduced: true
-    reproduction_scope: "echo provider eval; equals/contains/regex/not-contains; --no-share JSON export"
+    reproduction_scope: "echo provider eval; equals/contains/regex/not-contains; is-json schema; javascript numeric abs-tol; canned-output text red-team subset; --no-share JSON export"
     redteam_plugins_documented: 157
     redteam_plugin_source: https://www.promptfoo.dev/docs/red-team/plugins/
     redteam_plugin_count_kind: "documented catalog size, not a live CLI count of a running binary"

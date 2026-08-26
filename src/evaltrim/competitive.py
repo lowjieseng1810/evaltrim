@@ -81,6 +81,7 @@ def run_competitive_harness(
             os.environ["EVALTRIM_NO_CACHE"] = prev_cache
     mut = mutation_score()
     sec = evaluate_security()
+    text_rt = _text_redteam_evaltrim(root)
     isolated = _load_isolated(root)
     reproduction = _reproduction_status(agenteval, env, isolated)
 
@@ -92,6 +93,7 @@ def run_competitive_harness(
         quality=quality,
         mut=mut,
         sec=sec,
+        text_rt=text_rt,
         scale_rows=scale_rows,
         agenteval=agenteval,
         env=env,
@@ -129,6 +131,7 @@ def run_competitive_harness(
             "note": sec["note"],
         },
         "isolated": isolated,
+        "text_redteam": text_rt,
         "gaps": gaps,
         "metrics": rows,
         "scale": scale_rows,
@@ -354,6 +357,62 @@ def _overlay_isolated(rows: list[dict[str, Any]], isolated: dict[str, Any], vers
             elif measured:
                 best = max(measured)
                 row["winner"] = "TIE" if nums[0] == best else UNMEASURED
+        if cap == "02_json_schema" and metric == "accuracy_on_three_gold_cases":
+            if pf.get("status") == "MEASURED" and isinstance(pf.get("json_schema_accuracy"), (int, float)):
+                row["Promptfoo"] = _cell(
+                    pf["json_schema_accuracy"],
+                    version=str(pf.get("version")),
+                    extra="is-json assertion; isolated Node 22.22.0",
+                )
+            et = _parse_measured_number(row["EvalTrim"])
+            nums = [
+                et,
+                _parse_measured_number(row["AgentEval"]),
+                _parse_measured_number(row["Promptfoo"]),
+            ]
+            measured = [n for n in nums if n is not None]
+            if len(measured) >= 2 and len(set(measured)) == 1:
+                row["winner"] = "TIE"
+            elif et is not None and measured:
+                best = max(measured)
+                row["winner"] = "TIE" if et == best else "LOSS"
+        if cap == "02_numeric_tolerance":
+            if pf.get("status") == "MEASURED" and isinstance(pf.get("numeric_accuracy"), (int, float)):
+                row["Promptfoo"] = _cell(
+                    pf["numeric_accuracy"],
+                    version=str(pf.get("version")),
+                    extra="javascript abs-tol on canned numbers",
+                )
+            et = _parse_measured_number(row["EvalTrim"])
+            other = _parse_measured_number(row["Promptfoo"])
+            if et is not None and other is not None:
+                row["winner"] = "TIE" if et == other else ("EvalTrim" if et > other else "LOSS")
+        if cap == "13_redteam" and metric == "text_common_subset_detection_rate":
+            raw_rt = pf.get("text_redteam")
+            rt: dict[str, Any] = raw_rt if isinstance(raw_rt, dict) else {}
+            if rt.get("status") == "MEASURED" and isinstance(rt.get("detection_rate"), (int, float)):
+                row["Promptfoo"] = _cell(
+                    rt["detection_rate"],
+                    version=str(pf.get("version")),
+                    extra="canned outputs; not plugin catalog",
+                )
+            et = _parse_measured_number(row["EvalTrim"])
+            other = _parse_measured_number(row["Promptfoo"])
+            if et is not None and other is not None:
+                row["winner"] = "TIE" if et == other else ("EvalTrim" if et > other else "LOSS")
+        if cap == "13_redteam" and metric == "text_common_subset_false_positives":
+            raw_fp = pf.get("text_redteam")
+            rt_fp: dict[str, Any] = raw_fp if isinstance(raw_fp, dict) else {}
+            if rt_fp.get("status") == "MEASURED" and rt_fp.get("false_positives") is not None:
+                row["Promptfoo"] = _cell(
+                    float(rt_fp["false_positives"]),
+                    version=str(pf.get("version")),
+                    extra="canned benign outputs",
+                )
+            et = _parse_measured_number(row["EvalTrim"])
+            other = _parse_measured_number(row["Promptfoo"])
+            if et is not None and other is not None:
+                row["winner"] = "TIE" if et == other else ("EvalTrim" if et < other else "LOSS")
         if cap == "04_trajectory" and ev.get("status") == "MEASURED" and ev.get("trajectory_diff_accuracy") is not None:
             row["EvalView"] = _cell(
                 ev["trajectory_diff_accuracy"], version=str(ev.get("version")), extra="compare_to_golden canned traces"
@@ -433,6 +492,19 @@ def _grade_evaltrim(case: dict[str, Any]) -> bool | None:
             input="i",
             expected="",
             graders=[GraderSpec(type="json_schema", params={"schema": case["schema"]})],
+        )
+        out = AgentOutput(text=text)
+    elif family == "numeric_tolerance":
+        rec = EvaluationRecord(
+            id=case["id"],
+            input="i",
+            expected=str(case.get("expected") or ""),
+            graders=[
+                GraderSpec(
+                    type="numeric_tolerance",
+                    params={"expected": case["expected"], "abs": case.get("abs", 0.01)},
+                )
+            ],
         )
         out = AgentOutput(text=text)
     elif family == "tool_names":
@@ -568,11 +640,24 @@ def _grader_head_to_head(cases: list[dict[str, Any]], agenteval: dict[str, Any] 
     ae_acc = ae_correct / len(ae_scored) if ae_scored else UNMEASURED
     et_only = [r for r in rows if r["family"] in {"tool_args", "trajectory"}]
     et_only_acc = sum(1 for r in et_only if r["evaltrim"] == r["gold"]) / len(et_only) if et_only else None
+
+    def _fam(name: str) -> dict[str, Any]:
+        fam = [r for r in rows if r["family"] == name and r["gold"] is not None]
+        et_n = [r for r in fam if isinstance(r["evaltrim"], bool)]
+        ae_n = [r for r in fam if isinstance(r["agenteval"], bool)]
+        return {
+            "n": len(fam),
+            "evaltrim": (sum(1 for r in et_n if r["evaltrim"] == r["gold"]) / len(et_n)) if et_n else None,
+            "agenteval": (sum(1 for r in ae_n if r["agenteval"] == r["gold"]) / len(ae_n)) if ae_n else UNMEASURED,
+        }
+
     return {
         "cases": rows,
         "common_subset_n": len(scored),
         "evaltrim_accuracy": et_acc,
         "agenteval_accuracy": ae_acc,
+        "json_schema_family": _fam("json_schema"),
+        "numeric_family": _fam("numeric_tolerance"),
         "evaltrim_only_trajectory_tool_args_accuracy": et_only_acc,
         "agenteval_trajectory": NOT_OFFERED,
         "agreement": sum(1 for r in ae_scored if r["evaltrim"] == r["agenteval"]) / len(ae_scored)
@@ -740,6 +825,58 @@ def _flake_head_to_head(agenteval: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _text_redteam_evaltrim(root: Path) -> dict[str, Any]:
+    """Score the frozen canned-output red-team subset with EvalTrim graders."""
+    path = root / "benchmarks" / "shared" / "redteam_text_subset.yaml"
+    data = _load_yaml(path)
+    cases = list(data.get("cases") or [])
+    tp = fp = attacks = benign = 0
+    details: list[dict[str, Any]] = []
+    for case in cases:
+        oracle = case.get("oracle") or {}
+        graders: list[GraderSpec] = []
+        if oracle.get("not_contains"):
+            graders.append(GraderSpec(type="not_contains", params={"text": oracle["not_contains"]}))
+        if oracle.get("contains"):
+            graders.append(GraderSpec(type="contains", params={"text": oracle["contains"]}))
+        rec = EvaluationRecord(
+            id=str(case["id"]),
+            input=str(case["input"]),
+            expected=str(case["expected"]),
+            graders=graders,
+        )
+        grades = grade_record(rec, AgentOutput(text=str(case.get("output") or "")))
+        failed = any(g.passed is False for g in grades)
+        should = bool(case.get("should_detect"))
+        if should:
+            attacks += 1
+            if failed:
+                tp += 1
+        else:
+            benign += 1
+            if failed:
+                fp += 1
+        details.append(
+            {
+                "id": case["id"],
+                "should_detect": should,
+                "detected": failed,
+                "ground_truth_classification": case.get("ground_truth_classification"),
+            }
+        )
+    return {
+        "n": len(details),
+        "detection_rate": round(tp / attacks, 4) if attacks else None,
+        "false_positives": fp,
+        "attacks": attacks,
+        "benign": benign,
+        "reproducibility": 1.0,
+        "cases": details,
+        "source": "benchmarks/shared/redteam_text_subset.yaml",
+        "note": "Canned outputs; tool-based families are excluded from this comparable subset.",
+    }
+
+
 def _evaltrim_workflow(root: Path) -> dict[str, Any]:
     rec = EvaluationRecord(id="r1", input="hello", expected="hello", graders=[GraderSpec(type="exact")])
     from evaltrim.runtime.adapters import EchoExpectedAdapter
@@ -871,7 +1008,12 @@ def _evaltrim_workflow(root: Path) -> dict[str, Any]:
 def _min_metric(quality: dict[str, Any], key: str) -> float | None:
     """Min over core constructed suites (coding/support/shopping). Witness included for uniqueness."""
     core: tuple[str, ...] = ("coding", "customer_support", "shopping")
-    if key.startswith("unique_witness") or key in {"critical_witness_recall", "false_witness_rate"}:
+    if key.startswith("unique_witness") or key in {
+        "critical_witness_recall",
+        "critical_witness_precision",
+        "false_witness_rate",
+        "false_critical_witness_count",
+    }:
         core = ("coding", "customer_support", "shopping", "robustness", "witness")
     vals = []
     for row in quality.get("benchmarks", []):
@@ -918,6 +1060,7 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
     q = kwargs["quality"]
     mut = kwargs["mut"]
     sec = kwargs["sec"]
+    text_rt = kwargs.get("text_rt") or {}
     ae_ver = g.get("agenteval_version")
     ae_acc = g["agenteval_accuracy"]
     ae_acc_n = ae_acc if isinstance(ae_acc, float) else None
@@ -956,7 +1099,13 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
             "evidence": evidence,
         }
 
-    evid_g = "fixtures/grader_cases.yaml; in-process; 2026-08-25; 4×Xeon 15GiB; AgentEval 0.7.0"
+    evid_g = "fixtures/grader_cases.yaml; in-process; 2026-08-26; 4×Xeon 15GiB; AgentEval 0.7.0"
+    json_fam = g.get("json_schema_family") or {}
+    num_fam = g.get("numeric_family") or {}
+    json_et = json_fam.get("evaltrim")
+    json_ae = json_fam.get("agenteval")
+    json_ae_n = json_ae if isinstance(json_ae, float) else None
+    num_et = num_fam.get("evaltrim")
     return [
         row(
             "01_basic_grading",
@@ -974,15 +1123,28 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
         row(
             "02_json_schema",
             "accuracy_on_three_gold_cases",
-            _cell(g["evaltrim_accuracy"], version=__version__),
-            _cell(ae_acc, version=ae_ver) if ae_acc_n is not None else UNMEASURED,
+            _cell(json_et, version=__version__) if isinstance(json_et, float) else UNMEASURED,
+            _cell(json_ae, version=ae_ver) if json_ae_n is not None else UNMEASURED,
+            UNMEASURED,
+            "LLM-DEPENDENT (JsonCorrectnessMetric not scored without a shared provider)",
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            _winner(json_et, json_ae_n) if json_ae_n is not None and isinstance(json_et, float) else UNMEASURED,
+            evid_g + "; AgentEval uses jsonschema library; Promptfoo overlay from is-json",
+        ),
+        row(
+            "02_numeric_tolerance",
+            "accuracy_on_two_gold_cases",
+            _cell(num_et, version=__version__) if isinstance(num_et, float) else UNMEASURED,
+            NOT_OFFERED,
             UNMEASURED,
             UNMEASURED,
             UNMEASURED,
             UNMEASURED,
             UNMEASURED,
-            _winner(g["evaltrim_accuracy"], ae_acc_n) if ae_acc_n is not None else UNMEASURED,
-            evid_g + "; AgentEval uses jsonschema library",
+            UNMEASURED,
+            evid_g + "; EvalTrim numeric_tolerance; Promptfoo overlay from javascript abs-tol",
         ),
         row(
             "03_tool_args",
@@ -1161,7 +1323,33 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
             UNMEASURED,
             UNMEASURED,
             UNMEASURED,
-            "evaltrim.security.evaluate_security; Promptfoo CLI not executed",
+            "evaltrim.security.evaluate_security including tool-family probes; Promptfoo tool plugins UNMEASURED",
+        ),
+        row(
+            "13_redteam",
+            "text_common_subset_detection_rate",
+            _cell(text_rt.get("detection_rate"), version=__version__),
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            "benchmarks/shared/redteam_text_subset.yaml canned outputs; Promptfoo overlay if isolated MEASURED",
+        ),
+        row(
+            "13_redteam",
+            "text_common_subset_false_positives",
+            _cell(float(text_rt.get("false_positives") or 0), version=__version__),
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            UNMEASURED,
+            "Lower is better; canned benign outputs on the same fixture",
         ),
         row(
             "13_redteam",
@@ -1266,6 +1454,32 @@ def _result_rows(**kwargs: Any) -> list[dict[str, Any]]:
             NDC,
             UNMEASURED,
             "benchmark_metadata.yaml",
+        ),
+        row(
+            "16_unique_witness",
+            "unique_witness_recall_min",
+            _cell(_min_metric(q, "unique_witness_recall"), version=__version__),
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NDC,
+            UNMEASURED,
+            "includes witness_final; rare tokens must not create witnesses",
+        ),
+        row(
+            "16_unique_witness",
+            "critical_witness_recall_min",
+            _cell(_min_metric(q, "critical_witness_recall"), version=__version__),
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NOT_OFFERED,
+            NDC,
+            UNMEASURED,
+            "hard gate 1.0 on labeled critical witnesses",
         ),
         row(
             "17_counterfactual_removal",
@@ -1393,6 +1607,7 @@ def _scorecard(grader_h2h, stats_h2h, flake_h2h, workflow, quality, mut, sec) ->
         "retirement_safety": nz(_min_metric(quality, "retirement_safety_rate")),
         "critical_coverage": nz(_min_metric(quality, "critical_coverage")),
         "unique_witness_precision": nz(_min_metric(quality, "unique_witness_precision")),
+        "unique_witness_recall": nz(_min_metric(quality, "unique_witness_recall")),
         "mutation": nz(mut.get("mutation_score")),
         "security_detection": nz(sec.get("detection_rate")),
     }

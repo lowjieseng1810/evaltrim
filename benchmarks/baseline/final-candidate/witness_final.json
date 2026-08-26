@@ -1,0 +1,74 @@
+{
+  "suite": "benchmarks/witness_final/suite.yaml",
+  "tests": 25,
+  "runtime_seconds": 0.0736,
+  "deterministic": true,
+  "redundancy_precision": 1.0,
+  "redundancy_recall": 1.0,
+  "redundancy_f1": 1.0,
+  "false_positive_rate": 0.0,
+  "false_retirement_rate": 0.0,
+  "unique_witness_precision": 1.0,
+  "unique_witness_recall": 1.0,
+  "false_witness_rate": 0.0,
+  "critical_witness_recall": 1.0,
+  "critical_witness_precision": 1.0,
+  "false_critical_witnesses": [],
+  "false_critical_witness_count": 0,
+  "retirement_safety_rate": 1.0,
+  "unsafe_retirements": [],
+  "critical_coverage": 1.0,
+  "suite_reduction": 0.32,
+  "keep": 12,
+  "merge": 8,
+  "retire": 0,
+  "review": 5,
+  "predicted_redundant_groups": [
+    [
+      "f-dup-a",
+      "f-dup-b",
+      "f-dup-c",
+      "f-para-a",
+      "f-para-b",
+      "f-rare-token"
+    ],
+    [
+      "f-near-a",
+      "f-near-b"
+    ]
+  ],
+  "unique_witness_predicted_ids": [
+    "f-ambiguous",
+    "f-boundary",
+    "f-combo",
+    "f-delete",
+    "f-empty",
+    "f-family",
+    "f-hist",
+    "f-malformed",
+    "f-privacy",
+    "f-req",
+    "f-traj-skip"
+  ],
+  "unique_witness_expected_ids": [
+    "f-ambiguous",
+    "f-boundary",
+    "f-combo",
+    "f-delete",
+    "f-empty",
+    "f-family",
+    "f-hist",
+    "f-malformed",
+    "f-privacy",
+    "f-req",
+    "f-traj-skip"
+  ],
+  "critical_witness_predicted_ids": [
+    "f-boundary",
+    "f-combo",
+    "f-delete",
+    "f-privacy",
+    "f-req",
+    "f-traj-skip"
+  ]
+}

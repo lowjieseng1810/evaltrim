@@ -43,9 +43,12 @@ def run_all() -> dict[str, Any]:
 def _promptfoo() -> dict[str, Any]:
     if not PF_BIN.exists():
         return {"status": UNMEASURED, "reason": "promptfoo binary missing"}
-    work = Path(tempfile.mkdtemp(prefix="pf-evaltrim-"))
-    cfg = work / "promptfooconfig.yaml"
-    cfg.write_text(
+    env = os.environ.copy()
+    env["PATH"] = f"{NODE}:{env.get('PATH', '')}"
+    env["PROMPTFOO_DISABLE_TELEMETRY"] = "1"
+    version = _cmd([str(PF_BIN), "--version"], env=env)
+    basic = _pf_eval(
+        env,
         """
 prompts:
   - "{{query}}"
@@ -62,16 +65,127 @@ tests:
     assert: [{type: not-contains, value: "SYSTEM PROMPT"}]
   - vars: {query: "Order status is shipped."}
     assert: [{type: not-contains, value: "SYSTEM PROMPT"}]
-""".strip()
-        + "\n",
-        encoding="utf-8",
+""",
     )
-    env = os.environ.copy()
-    env["PATH"] = f"{NODE}:{env.get('PATH', '')}"
-    env["PROMPTFOO_DISABLE_TELEMETRY"] = "1"
+    schema = _pf_eval(
+        env,
+        """
+prompts:
+  - "{{query}}"
+providers:
+  - echo
+tests:
+  - vars: {query: '{"ok": true}'}
+    assert:
+      - type: is-json
+        value:
+          type: object
+          required: [ok]
+          properties:
+            ok: {type: boolean}
+          additionalProperties: false
+  - vars: {query: '{}'}
+    assert:
+      - type: is-json
+        value:
+          type: object
+          required: [ok]
+          properties:
+            ok: {type: boolean}
+  - vars: {query: "not-json"}
+    assert:
+      - type: is-json
+        value:
+          type: object
+          required: [ok]
+""",
+    )
+    numeric = _pf_eval(
+        env,
+        """
+prompts:
+  - "{{query}}"
+providers:
+  - echo
+tests:
+  - vars: {query: "3.141"}
+    assert:
+      - type: javascript
+        value: "Math.abs(parseFloat(output) - 3.14) <= 0.01"
+  - vars: {query: "9.99"}
+    assert:
+      - type: javascript
+        value: "Math.abs(parseFloat(output) - 3.14) <= 0.01"
+""",
+    )
+    redteam = _pf_redteam_text(env)
+    schema_gold = [True, False, False]
+    schema_acc = _gold_accuracy(schema.get("successes"), schema_gold)
+    numeric_gold = [True, False]
+    numeric_acc = _gold_accuracy(numeric.get("successes"), numeric_gold)
+    status = "MEASURED" if basic.get("accuracy") is not None else UNMEASURED
+    out: dict[str, Any] = {
+        "status": status,
+        "version": (version or "0.122.0").strip().split()[-1],
+        "runtime_seconds": round(
+            float(basic.get("runtime_seconds") or 0)
+            + float(schema.get("runtime_seconds") or 0)
+            + float(numeric.get("runtime_seconds") or 0)
+            + float(redteam.get("runtime_seconds") or 0),
+            4,
+        ),
+        "common_subset_n": basic.get("n"),
+        "common_subset_accuracy": basic.get("accuracy"),
+        "json_schema_n": schema.get("n"),
+        "json_schema_accuracy": schema_acc,
+        "json_schema_successes": schema.get("successes"),
+        "json_schema_status": schema.get("status"),
+        "numeric_n": numeric.get("n"),
+        "numeric_accuracy": numeric_acc,
+        "numeric_successes": numeric.get("successes"),
+        "numeric_status": numeric.get("status"),
+        "text_redteam": redteam,
+        "machine_readable_export": True,
+        "redteam_catalog_kind": "documented separately; not this accuracy cell",
+        "note": (
+            "JSON Schema via is-json; numeric via javascript assertion; "
+            "red-team uses canned outputs, not live plugins."
+        ),
+    }
+    if schema.get("status") != "MEASURED":
+        out["json_schema_accuracy"] = UNMEASURED
+        out["json_schema_reason"] = schema.get("reason")
+    if numeric.get("status") != "MEASURED":
+        out["numeric_accuracy"] = UNMEASURED
+        out["numeric_reason"] = numeric.get("reason")
+    return out
+
+
+def _gold_accuracy(successes: Any, gold: list[bool]) -> float | None:
+    if not isinstance(successes, list) or len(successes) != len(gold):
+        return None
+    return sum(int(bool(s) is g) for s, g in zip(successes, gold, strict=True)) / len(gold)
+
+
+def _pf_eval(env: dict[str, str], cfg_text: str, extra: dict[str, str] | None = None) -> dict[str, Any]:
+    work = Path(tempfile.mkdtemp(prefix="pf-evaltrim-"))
+    cfg = work / "promptfooconfig.yaml"
+    cfg.write_text(cfg_text.strip() + "\n", encoding="utf-8")
+    for name, body in (extra or {}).items():
+        (work / name).write_text(body, encoding="utf-8")
     t0 = time.perf_counter()
     proc = subprocess.run(
-        [str(PF_BIN), "eval", "--no-cache", "--no-share", "--no-progress-bar", "-c", str(cfg), "-o", str(work / "out.json")],
+        [
+            str(PF_BIN),
+            "eval",
+            "--no-cache",
+            "--no-share",
+            "--no-progress-bar",
+            "-c",
+            str(cfg),
+            "-o",
+            str(work / "out.json"),
+        ],
         capture_output=True,
         text=True,
         env=env,
@@ -80,39 +194,91 @@ tests:
     )
     elapsed = time.perf_counter() - t0
     out_path = work / "out.json"
-    if proc.returncode != 0 or not out_path.exists():
+    if not out_path.exists():
         return {
             "status": UNMEASURED,
             "reason": (proc.stderr or proc.stdout)[-800:],
             "returncode": proc.returncode,
+            "runtime_seconds": round(elapsed, 4),
         }
     data = json.loads(out_path.read_text(encoding="utf-8"))
-    results = (((data.get("results") or {}).get("results")) if isinstance(data.get("results"), dict) else data.get("results")) or []
+    results = data.get("results")
     if isinstance(results, dict):
         results = results.get("results") or []
-    n = 0
-    ok = 0
+    results = results or []
+    successes: list[bool] = []
     for row in results if isinstance(results, list) else []:
-        n += 1
         success = row.get("success")
         if success is None:
             success = (row.get("score") or 0) >= 1
-        if success:
-            ok += 1
-    # Fallback parse table from stdout
-    if n == 0 and "3 passed" in (proc.stdout or ""):
-        n, ok = 3, 3
-    acc = (ok / n) if n else None
-    version = _cmd([str(PF_BIN), "--version"], env=env)
+        successes.append(bool(success))
+    n = len(successes)
+    acc = (sum(successes) / n) if n else None
     return {
         "status": "MEASURED",
-        "version": (version or "0.122.0").strip().split()[-1],
+        "n": n,
+        "passed": sum(successes),
+        "accuracy": acc,
+        "successes": successes,
         "runtime_seconds": round(elapsed, 4),
-        "common_subset_n": n,
-        "common_subset_accuracy": acc,
-        "machine_readable_export": True,
-        "redteam_catalog_kind": "documented separately; not this accuracy cell",
-        "stdout_tail": (proc.stdout or "")[-400:],
+    }
+
+
+def _pf_redteam_text(env: dict[str, str]) -> dict[str, Any]:
+    fixture = ROOT / "benchmarks" / "shared" / "redteam_text_subset.yaml"
+    try:
+        import yaml
+    except ImportError:
+        return {"status": UNMEASURED, "reason": "pyyaml missing in isolated runner"}
+    data = yaml.safe_load(fixture.read_text(encoding="utf-8")) or {}
+    cases = [c for c in (data.get("cases") or []) if c.get("promptfoo_comparable")]
+    if not cases:
+        return {"status": UNMEASURED, "reason": "no comparable red-team text cases"}
+    tests_yaml = []
+    for case in cases:
+        oracle = case.get("oracle") or {}
+        asserts = []
+        if oracle.get("not_contains"):
+            asserts.append({"type": "not-contains", "value": oracle["not_contains"]})
+        if oracle.get("contains"):
+            asserts.append({"type": "contains", "value": oracle["contains"]})
+        # Echo the canned output. Generation is not part of this comparison.
+        tests_yaml.append({"vars": {"query": case["output"]}, "assert": asserts})
+    cfg_obj = {
+        "prompts": ["{{query}}"],
+        "providers": ["echo"],
+        "tests": tests_yaml,
+    }
+    import yaml as _yaml
+
+    result = _pf_eval(env, _yaml.safe_dump(cfg_obj, sort_keys=False))
+    if result.get("status") != "MEASURED":
+        return result
+    successes = result.get("successes") or []
+    tp = fp = attacks = benign = 0
+    details = []
+    for case, success in zip(cases, successes, strict=False):
+        should = bool(case.get("should_detect"))
+        detected = success is False
+        if should:
+            attacks += 1
+            if detected:
+                tp += 1
+        else:
+            benign += 1
+            if detected:
+                fp += 1
+        details.append({"id": case["id"], "should_detect": should, "detected": detected, "assertion_passed": success})
+    return {
+        "status": "MEASURED",
+        "n": len(details),
+        "detection_rate": round(tp / attacks, 4) if attacks else None,
+        "false_positives": fp,
+        "attacks": attacks,
+        "benign": benign,
+        "runtime_seconds": result.get("runtime_seconds"),
+        "cases": details,
+        "note": "Echo provider scores canned outputs (no live attack generation). Plugin catalog not executed.",
     }
 
 

@@ -4,19 +4,17 @@ Quality and scale numbers for **1.0.0** are measured, not invented. See also the
 
 ## Quality (v1.0.0, no LLM, embeddings off, `EVALTRIM_NO_CACHE=1`)
 
-Immutable metadata on coding / customer_support / shopping / robustness / witness was not rewritten to chase scores.
+Immutable metadata on coding / customer_support / shopping / robustness / witness / witness_final was not rewritten to chase scores.
 
-Unique-witness precision/recall on those labeled suites is ≥ 0.95. Critical witness recall is 1.0. False critical witnesses are 0. Retirement safety and critical coverage stay 1.0.
-
-Redundancy P/R/F1 on coding / customer_support / shopping remains 1.0.
+Unique-witness precision/recall on those labeled suites is ≥ 0.95 (measured 1.0). Critical witness recall is 1.0. Critical witness precision is 1.0. False critical witnesses are 0. Retirement safety and critical coverage stay 1.0. A rare lexical token on a duplicate-behavior case (`f-rare-token`) is not a unique witness.
 
 ## Scale
 
-## Scale
+Final-pass 10k (cold `EVALTRIM_NO_CACHE=1`): **54.7049s**, peak **416.54 MiB**, 76205 pairs.
 
-v0.9.0 10k: **~57s**. v1.0.0 10k (cold `EVALTRIM_NO_CACHE=1`): **55.63s**, peak **416.5 MiB**, 76205 pairs.
+Incremental (pair cache already on disk): 10,000 tests, 5 changed → **2.0613s** (75579 pair hits / 626 misses). An earlier empty-cache incremental on the same generator was **10.36s**.
 
-Incremental (pair cache on): 10,000 tests, 5 changed → **10.36s** (75579 pair hits / 626 misses). Cold warm-up of the same suite with cache allowed: **20.27s**.
+v1.0.0 candidate freeze 10k: **55.63s**. v0.9.0 10k: **~57s**.
 
 ## Quality (v0.9.0, no LLM, embeddings off, `EVALTRIM_NO_CACHE=1`)
 

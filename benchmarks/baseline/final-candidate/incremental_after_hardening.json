@@ -1,0 +1,9 @@
+{
+  "tests": 10000,
+  "changed": 5,
+  "cold_runtime_seconds": 2.2158,
+  "incremental_runtime_seconds": 2.0613,
+  "pair_cache_hits": 75579.0,
+  "pair_cache_misses": 626.0,
+  "note": "Unchanged pairs reuse persisted scores; coverage/removal still run on the full suite."
+}

@@ -73,6 +73,20 @@ cases:
     schema:
       type: object
       required: [ok]
+  - id: numeric_pass
+    family: numeric_tolerance
+    gold: true
+    comparable: evaltrim_only
+    text: "3.141"
+    expected: 3.14
+    abs: 0.01
+  - id: numeric_fail
+    family: numeric_tolerance
+    gold: false
+    comparable: evaltrim_only
+    text: "9.99"
+    expected: 3.14
+    abs: 0.01
   - id: tool_pass
     family: tool_names
     gold: true

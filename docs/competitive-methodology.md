@@ -1,6 +1,6 @@
 # Competitive methodology
 
-Date of this verification pass: **2026-08-25**. EvalTrim **1.0.0**.
+Date of this verification pass: **2026-08-26**. EvalTrim **1.0.0**.
 
 ## Fairness
 
@@ -15,7 +15,7 @@ Date of this verification pass: **2026-08-25**. EvalTrim **1.0.0**.
 ## Isolated versions (this pass)
 
 - AgentEval / agentevalkit **0.7.0**
-- Promptfoo **0.122.0** on Node **v22.22.0** (echo provider; no share)
+- Promptfoo **0.122.0** on isolated Node **v22.22.0** (echo provider; is-json; javascript numeric; canned-output text red-team subset; no share)
 - DeepEval **4.2.0** ExactMatchMetric + PatternMatchMetric (GEval LLM-DEPENDENT)
 - Inspect AI **0.3.260** mockllm + exact scorer
 - EvalView **0.8.1** `compare_to_golden`
@@ -25,17 +25,13 @@ Date of this verification pass: **2026-08-25**. EvalTrim **1.0.0**.
 
 ## Unique witnesses
 
-Coverage uniqueness requires counterfactual critical/requirement/boundary/history loss or an exclusive non-weak signature. Leftover generic bands (`amount_below_limit`) are anti-merge distinctive atoms, not suite unique witnesses. Ground truth in `benchmarks/*/benchmark_metadata.yaml` was not rewritten.
+Coverage uniqueness requires counterfactual critical/requirement/boundary/history loss or an exclusive non-weak signature. Leftover generic bands (`amount_below_limit`) and a rare lexical token on a duplicate behavior (`f-rare-token`) are not suite unique witnesses. Ground truth in `benchmarks/*/benchmark_metadata.yaml` and `benchmarks/witness_final/` was not rewritten after scoring.
 
-## Fairness
+## Red team
 
-1. Each tool uses its normal API (EvalTrim `grade_record`; AgentEval `get_grader`).
-2. Competitors were not crippled. Missing extras (`scipy`, `sentence-transformers`) are recorded; those graders were not scored.
-3. EvalTrim has no hidden fixture-only flags.
-4. Different names for the same check are compared on outcomes, not labels.
-5. The same YAML fixtures are used when both tools can consume the task.
-6. If reproduction failed: **UNMEASURED**. If the job differs: **NOT DIRECTLY COMPARABLE**. If the API does not exist: **Capability not offered**.
-7. No fabricated competitor numbers.
+EvalTrim local family probes (`evaluate_security`) include tool-call oracles. Those tool families stay **UNMEASURED** for Promptfoo (plugin catalog is not detection quality).
+
+The **text common subset** in `benchmarks/shared/redteam_text_subset.yaml` uses **pre-generated outputs**. EvalTrim graders and Promptfoo echo assertions score the same strings. No vendor gets an LLM-generation advantage. Catalog breadth (157 plugins, public docs) is recorded separately.
 
 ## Tasks
 
@@ -56,12 +52,6 @@ Contains: AgentEval is case-sensitive; EvalTrim is case-insensitive. Regex: Eval
 EvalTrim `compare_samples`: Welch t-test, Cohen's d, practical thresholds. `regression_flag` needs statistical **and** practical significance **and** a mean decrease.
 
 AgentEval `compare_runs`: Welch t-test; a statistically significant mean drop is `REGRESSED` at default threshold 0. The scipy extra was **not** installed; AgentEval used its pure-Python fallback.
-
-## Red team
-
-Common **quality** subset is EvalTrim local probes. Promptfoo **catalog breadth** is documented separately (157 plugins on public docs, 2026-08-25). Promptfoo CLI did not run on this host (Node `>=22.22.0` required by 0.122.0; host is 22.14.0; 0.120.0 drizzle migrator failed).
-
-Do not compare catalog size to detection quality.
 
 ## Suite minimization
 

@@ -115,10 +115,28 @@ def test_labeled_witness_suite_gates():
     assert row["unique_witness_precision"] >= 0.95
     assert row["unique_witness_recall"] >= 0.95
     assert row["critical_witness_recall"] == 1.0
+    assert row["critical_witness_precision"] == 1.0
     assert row["false_critical_witness_count"] == 0
     assert row["retirement_safety_rate"] == 1.0
     assert row["critical_coverage"] == 1.0
     assert row["false_witness_rate"] in (0.0, 0)
+
+
+def test_witness_final_gates_and_rare_token():
+    row = run_benchmark(
+        Path("benchmarks/witness_final/suite.yaml"),
+        Path("benchmarks/witness_final/benchmark_metadata.yaml"),
+    )
+    assert row["unique_witness_precision"] >= 0.95
+    assert row["unique_witness_recall"] >= 0.95
+    assert row["critical_witness_recall"] == 1.0
+    assert row["critical_witness_precision"] == 1.0
+    assert row["false_critical_witness_count"] == 0
+    assert row["retirement_safety_rate"] == 1.0
+    assert row["critical_coverage"] == 1.0
+    assert "f-rare-token" not in row["unique_witness_predicted_ids"]
+    assert "f-twin-b" not in row["unique_witness_predicted_ids"]
+    assert "f-privacy" in row["unique_witness_predicted_ids"]
 
 
 def test_constructed_suites_unique_witness_floor():

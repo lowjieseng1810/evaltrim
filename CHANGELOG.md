@@ -1,8 +1,13 @@
 # Changelog
 
-## 1.0.0 — 2026-08-25
+## 1.0.0 — 2026-08-26
 
-Release after unique-witness repair and isolated competitor reproduction.
+Final competitive verification pass (evidence lock, not a new feature wave).
+
+- Larger labeled unique-witness suite `benchmarks/witness_final/` (rare tokens must not create witnesses). Gates: precision/recall ≥ 0.95, critical witness recall 1.0, false critical 0, retirement safety 1.0.
+- Isolated Promptfoo 0.122.0 now MEASURED on JSON Schema (`is-json`), numeric abs-tol (javascript), and a canned-output **text** red-team common subset. Tool-plugin catalog remains documented breadth, not detection quality.
+- Shared immutable fixture family under `benchmarks/shared/`. Ground truth was not rewritten after scoring.
+- Competitive status: **VERIFIED PARITY ON MEASURED DIMENSIONS**. Not a claim of beating every competitor on every surface. Competitor 10k scale, EvalView GUI, DeepEval LLM judges, and DX bake-off remain UNMEASURED / NDC.
 
 - Unique-witness classifier: coverage uniqueness from counterfactual loss and exclusive signatures, not leftover generic tokens. Critical witness recall 1.0 and false critical witnesses 0 on labeled suites. Labeled suite: `benchmarks/witness/`.
 - `evaltrim portfolio --objective witness` returns a minimum practical witness set (heuristic, not a proven optimum).

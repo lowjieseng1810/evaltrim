@@ -11,7 +11,11 @@
 - Watch uses mtime polling; it is not an OS-specific recursive inotify daemon.
 - `llm_judge` grader still skips unless you add a provider callable.
 - Local sandbox is **LOCAL SANDBOX**, not a SECURE ISOLATED VM / container / seccomp jail.
-- Red-team probes are family-level fixtures, not a vendor attack catalog.
+- Red-team **text** common subset is MEASURED vs Promptfoo echo assertions on canned outputs. Tool-family probes and Promptfoo's 157-plugin catalog are not the same metric.
+- Competitor 10k-scale runs were not executed; those cells stay UNMEASURED.
+- Competitor DX (install time, time-to-first-result) was not run as a blind clean-environment bake-off; those cells stay UNMEASURED.
+- DeepEval JSON/GEval/tool metrics remain LLM-DEPENDENT without a shared provider.
+- EvalView live GUI / snapshot-against-running-agent remains NOT DIRECTLY COMPARABLE to this CLI.
 - Experiment compare uses recorded cases; there is no hosted experiment service.
 - EvalTrim never deletes or rewrites suite files.
 - Hosted SaaS, auto-delete, automatic repair, and a full MCP platform are out of scope.

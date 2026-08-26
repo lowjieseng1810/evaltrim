@@ -8,7 +8,7 @@ EvalTrim is a **local-first** CLI for AI-agent eval suites. It does not replace 
 
 It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW` / `ADD_CANDIDATE`, each with a serializable evidence ledger.
 
-Current version: **1.0.0**. Competitive verification (2026-08-25): **VERIFIED PARITY ON MEASURED DIMENSIONS**. Common local graders tied at 1.0 where both sides were MEASURED (AgentEval 0.7.0, Promptfoo 0.122.0 echo assertions, DeepEval ExactMatch/PatternMatch, Inspect mockllm exact, AgentEvalHQ ResponseAssertions). EvalView canned trajectory diffs tied at 1.0. This is **not** “beats all competitors.” 10k scale and suite-intelligence remain EvalTrim-only measurements; hosted platforms are NOT DIRECTLY COMPARABLE.
+Current version: **1.0.0**. Competitive verification (2026-08-26): **VERIFIED PARITY ON MEASURED DIMENSIONS**. Common local graders, JSON Schema, numeric tolerance, and the canned-output text red-team subset **tied at 1.0** where both sides were MEASURED. EvalView canned trajectory diffs tied at 1.0. This is **not** “beats all competitors.” 10k scale, Promptfoo plugin-catalog detection, DeepEval LLM judges, EvalView GUI, and competitor DX remain UNMEASURED or NOT DIRECTLY COMPARABLE.
 
 ## First run
 

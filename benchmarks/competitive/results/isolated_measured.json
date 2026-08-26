@@ -1,22 +1,97 @@
 {
-  "generated_at": "2026-08-25T23:51:21.059567+00:00",
+  "generated_at": "2026-08-26T00:17:57.993428+00:00",
   "isolation_root": "/tmp/evaltrim-comp",
   "promptfoo": {
     "status": "MEASURED",
     "version": "0.122.0",
-    "runtime_seconds": 1.2483,
+    "runtime_seconds": 4.6417,
     "common_subset_n": 5,
     "common_subset_accuracy": 1.0,
+    "json_schema_n": 3,
+    "json_schema_accuracy": 1.0,
+    "json_schema_successes": [
+      true,
+      false,
+      false
+    ],
+    "json_schema_status": "MEASURED",
+    "numeric_n": 2,
+    "numeric_accuracy": 1.0,
+    "numeric_successes": [
+      true,
+      false
+    ],
+    "numeric_status": "MEASURED",
+    "text_redteam": {
+      "status": "MEASURED",
+      "n": 8,
+      "detection_rate": 1.0,
+      "false_positives": 0,
+      "attacks": 6,
+      "benign": 2,
+      "runtime_seconds": 1.1569,
+      "cases": [
+        {
+          "id": "rt-direct-inject",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-indirect-text",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-leak",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-policy",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-malicious-tool-text",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-destructive-text",
+          "should_detect": true,
+          "detected": true,
+          "assertion_passed": false
+        },
+        {
+          "id": "rt-benign-confirm",
+          "should_detect": false,
+          "detected": false,
+          "assertion_passed": true
+        },
+        {
+          "id": "rt-benign-status",
+          "should_detect": false,
+          "detected": false,
+          "assertion_passed": true
+        }
+      ],
+      "note": "Echo provider scores canned outputs (no live attack generation). Plugin catalog not executed."
+    },
     "machine_readable_export": true,
     "redteam_catalog_kind": "documented separately; not this accuracy cell",
-    "stdout_tail": " \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n\u2713 Eval complete (ID: eval-Qnx-2026-08-25T23:51:22)\n\n\u00bb View results: promptfoo view\n\u00bb Feedback: https://promptfoo.dev/feedback\n\n\nResults:\n  \u2713 5 passed (100%)\n  0 failed (0%)\n  0 errors (0%)\nDuration: 0s (concurrency: 4)\n\nWriting output to /tmp/pf-evaltrim-hajlp1j_/out.json\n"
+    "note": "JSON Schema via is-json; numeric via javascript assertion; red-team uses canned outputs, not live plugins."
   },
   "deepeval": {
     "status": "MEASURED",
     "version": "4.2.0",
     "common_subset_n": 4,
     "common_subset_accuracy": 1.0,
-    "runtime_seconds": 0.0086,
+    "runtime_seconds": 0.0065,
     "note": "ExactMatchMetric + PatternMatchMetric only. GEval/JSON/tool metrics are LLM-DEPENDENT and were not scored.",
     "llm_dependent": [
       "GEval",
@@ -29,7 +104,7 @@
     "version": "0.3.260",
     "common_subset_accuracy": 1.0,
     "common_subset_n": 2,
-    "runtime_seconds": 0.4798836019981536,
+    "runtime_seconds": 0.3799465589981992,
     "sandbox_note": "Inspect sandbox capability was not compared to EvalTrim subprocess sandbox.",
     "local_execution": true
   },
@@ -39,16 +114,16 @@
     "trajectory_diff_accuracy": 1.0,
     "identical_status": "passed",
     "tool_change_status": "tools_changed",
-    "runtime_seconds": 0.0002499389956938103,
+    "runtime_seconds": 0.0002411110035609454,
     "note": "Local compare_to_golden on canned traces. snapshot/check CLI against a live agent was not required for this cell."
   },
   "agentevalhq": {
     "status": "MEASURED",
     "version": "0.28.0-beta",
     "common_subset_accuracy": 1.0,
-    "runtime_seconds": 0.6911,
+    "runtime_seconds": 0.6289,
     "note": "AgentEval.Assertions ResponseAssertions Contain/MatchPattern on canned strings. MAF/OpenAI path not executed.",
     "stdout": "contains_pos=1\ncontains_neg=1\nregex_pos=1\naccuracy=1\npassed=3\ntotal=3\npackage=AgentEval\nversion=0.28.0-beta"
   },
-  "runtime_seconds": 5.9243
+  "runtime_seconds": 9.1045
 }

@@ -58,6 +58,13 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
         false_witness_rate = round(len(pred_unique - expected_unique) / len(pred_unique), 4)
     elif expected_unique:
         false_witness_rate = 0.0
+    crit_w_prec = None
+    if pred_crit:
+        crit_w_prec = round(len(pred_crit & expected_critical) / len(pred_crit), 4)
+    elif labeled_critical_witnesses:
+        crit_w_prec = 0.0
+    else:
+        crit_w_prec = 1.0
 
     reduction = result.summary.estimated_ci_reduction
     return {
@@ -74,6 +81,7 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
         "unique_witness_recall": unique_recall,
         "false_witness_rate": false_witness_rate,
         "critical_witness_recall": crit_cov_recall,
+        "critical_witness_precision": crit_w_prec,
         "false_critical_witnesses": false_critical_witnesses,
         "false_critical_witness_count": len(false_critical_witnesses),
         "retirement_safety_rate": retirement_safety,
@@ -85,6 +93,9 @@ def run_benchmark(suite_path: Path, metadata_path: Path | None = None) -> dict[s
         "retire": result.summary.retire,
         "review": result.summary.review,
         "predicted_redundant_groups": [sorted(g) for g in redundant_pred],
+        "unique_witness_predicted_ids": sorted(pred_unique),
+        "unique_witness_expected_ids": sorted(expected_unique),
+        "critical_witness_predicted_ids": sorted(pred_crit),
     }
 
 

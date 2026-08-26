@@ -1,0 +1,2 @@
+commit: 2016d98 Release EvalTrim 1.0.0 with unique-witness repair and isolated competitor parity.
+date: 2026-08-26T00:06:59Z

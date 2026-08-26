@@ -4,7 +4,7 @@ from typer.testing import CliRunner
 
 from evaltrim.benchmark import run_all_benchmarks
 from evaltrim.cli import app
-from evaltrim.competitive import run_competitive_harness
+from evaltrim.competitive import _text_redteam_evaltrim, run_competitive_harness
 
 runner = CliRunner()
 
@@ -29,6 +29,14 @@ def test_competitive_harness_does_not_claim_superior():
             assert row["winner"] != "EvalTrim"
         if "UNMEASURED" in str(row.get("AgentEval")) and row.get("AgentEval") == "UNMEASURED":
             assert row["winner"] in {"UNMEASURED", "NOT DIRECTLY COMPARABLE", "TIE"}
+
+
+def test_text_redteam_common_subset_evaltrim():
+    payload = _text_redteam_evaltrim(Path("."))
+    assert payload["detection_rate"] == 1.0
+    assert payload["false_positives"] == 0
+    assert payload["attacks"] >= 6
+    assert payload["benign"] >= 2
 
 
 def test_cli_benchmark_competitive_json():

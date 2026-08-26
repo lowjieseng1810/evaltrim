@@ -1,0 +1,25 @@
+[
+  {
+    "tests": 10000,
+    "runtime_seconds": 55.1446,
+    "peak_mib": 416.54,
+    "candidate_pairs": 76205,
+    "simulations_executed": 1.0,
+    "simulation_cache_entries": 1.0,
+    "timings": {
+      "behavior_seconds": 0.75306,
+      "candidate_seconds": 2.684502,
+      "similarity_seconds": 40.679734,
+      "removal_seconds": 5.347582,
+      "total_seconds": 51.483775,
+      "pair_cache_hits": 0.0,
+      "pair_cache_misses": 76205.0,
+      "simulations_executed": 1.0,
+      "simulation_cache_entries": 1.0
+    },
+    "keep": 2,
+    "merge": 430,
+    "retire": 0,
+    "review": 9568
+  }
+]
