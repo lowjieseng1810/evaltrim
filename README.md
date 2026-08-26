@@ -1,58 +1,25 @@
 # EvalTrim
 
-**Prove which AI-agent evals are worth keeping.**
+Prove which AI-agent evals are worth keeping.
 
-EvalTrim is the evaluation control plane for AI agents.
+EvalTrim is a local-first evaluation control plane for AI agents that evaluates not only agent behavior, but the evaluation suite itself. It never deletes tests. Recommendations are `KEEP` / `MERGE` / `REVIEW` / `RETIRE`, each with an evidence ledger.
 
-Don't just evaluate your agent. Maintain the evaluation system itself.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
-It is a **local-first** CLI. It does not replace your agent runtime or a generic eval harness. It sits beside them and answers: which tests are unique, which are redundant, what a removal would break, and what to run after a change. It never deletes tests. Recommendations are `KEEP` / `MERGE` / `RETIRE` / `REVIEW`, each with a serializable evidence ledger.
+![evaltrim analyze](docs/images/01-main-cli.svg)
 
-## Why this exists
+## Why EvalTrim?
 
-AI-agent evaluation suites grow quickly. Paraphrases, stale oracles, flaky history, conflicting expected outputs, and low-value cases accumulate. Deleting a test *feels* cheap until it was the only remaining witness for a critical behavior. EvalTrim makes that loss visible **before** anyone edits the suite.
+AI-agent eval suites grow quickly. Redundant, stale, flaky, and conflicting tests accumulate. Most tools evaluate the agent. EvalTrim also analyzes which tests are worth keeping.
 
-## What makes it different
+## The key idea
 
-1. **Unique behavioral witnesses** — the only remaining test for a behavior, boundary, requirement, or failure family.
-2. **Counterfactual removal** — simulate deleting a test and measure coverage that would actually disappear.
-3. **Evidence-backed maintenance** — every recommendation carries overlap, witness loss, and a removal verdict.
-4. **Suite health / evaluation debt** — labeled heuristics for maintainers, not scores you can game.
-5. **Portfolio optimization** — a greedy + 1-opt subset under cost / time / count budgets.
-6. **Production failure compression** — cluster failures into candidate tests; nothing is auto-inserted.
-7. **Local-first execution** — no hosted backend, no telemetry by default.
+Similarity creates candidates. Behavioral evidence determines safety. Counterfactual removal verifies what would actually be lost.
 
-Similarity may **create candidates**. It does **not** independently authorize `RETIRE`.
+![unique witness](docs/images/02-unique-witness.svg)
 
-## Core workflow
-
-```
-Agent → Evaluation → Trace → Behavior → Witnesses → Counterfactual → Evidence → Maintenance
-```
-
-RUN → RECORD → GRADE → COMPARE → DETECT → EXPLAIN → OPTIMIZE → MAINTAIN
-
-## What it does
-
-### Evaluate
-
-Plugin graders (exact, contains, regex, JSON Schema, numeric tolerance, tools, trajectories, latency, cost, custom), multi-turn scenarios, statistics, experiment matrix.
-
-### Regress
-
-Snapshots, replay, run classes including `UNCHANGED`, drift notes, flaky history (`ENVIRONMENTAL` vs model flake). A provider error is not a confirmed model regression.
-
-### Understand
-
-Behavior graph, unique witnesses, requirements, oracle health, oracle conflicts.
-
-### Optimize
-
-Suite minimization, information gain, portfolio / Pareto, evaluation debt.
-
-### Maintain
-
-Evidence-backed `KEEP` / `MERGE` / `REVIEW` / `RETIRE`. EvalTrim never rewrites the suite file.
+![counterfactual removal](docs/images/03-removal-simulation.svg)
 
 ## 30-second demo
 
@@ -63,126 +30,90 @@ python3 -m pip install -e ".[dev]"
 evaltrim analyze examples/demo_suite.yaml
 ```
 
-Representative output from that command (constructed demo suite, not production traffic):
+Real output on the constructed demo suite (not production traffic):
 
 ```
-# EvalTrim Report
-
-## Summary
-
 12 tests analyzed
 5 recommended KEEP
 3 MERGE
 0 RETIRE
 4 REVIEW
-
-Critical behavior coverage:
-100.0%
-
-Unique Witnesses
-
-- `privacy-delete`: condition:destructive, domain:privacy, state:unauthenticated
-- `refund-boundary`: condition:amount_at_limit, condition:policy_boundary, condition:threshold_equality
+Critical behavior coverage: 100.0%
 ```
-
-Full script: [`scripts/demo-public.sh`](scripts/demo-public.sh).
-
-## The key idea
-
-1. **Similarity creates candidates** (paraphrases, near-duplicates).
-2. **Behavioral evidence determines safety** (atoms, requirements, critical flags).
-3. **Counterfactual analysis checks what would actually be lost** if the test disappeared.
-
-A rare lexical token on a duplicate behavior is not a unique witness. Exclusive coverage is.
-
-## Example
-
-On `examples/demo_suite.yaml`:
-
-| Test | Recommendation | Why |
-| --- | --- | --- |
-| `privacy-delete` | **KEEP** | Unique privacy / destructive witness. Removing it drops critical coverage 100% → 80%. Verdict: KEEP. |
-| `refund-002b` | **MERGE** | Near-duplicate of the $700 refund escalation. Removal leaves coverage 100% / 100%. Verdict: SAFE_TO_RETIRE (still not auto-deleted). |
 
 ```bash
 evaltrim explain privacy-delete --suite examples/demo_suite.yaml
 evaltrim simulate-remove examples/demo_suite.yaml privacy-delete
-evaltrim simulate-remove examples/demo_suite.yaml refund-002b
 ```
+
+`privacy-delete` → **KEEP** (unique destructive/privacy witness; critical coverage would drop 100% → 80%).  
+`refund-002b` → **MERGE** (near-duplicate; coverage stays 100%). Still not auto-deleted.
+
+## What it does
+
+### Evaluate
+
+Grade agent outputs: exact/regex/JSON, tools, trajectories, scenarios, and statistics.
+
+### Detect
+
+Catch regressions, drift, flakes (including `ENVIRONMENTAL`), and oracle conflicts. A provider error is not a confirmed model regression.
+
+### Explain
+
+Show why a test is a unique witness and what counterfactual removal would lose.
+
+### Optimize
+
+Shrink the suite under coverage, cost, and time constraints (portfolio / Pareto, evaluation debt).
+
+### Maintain
+
+Emit evidence-backed `KEEP` / `MERGE` / `REVIEW` / `RETIRE`. EvalTrim never rewrites the suite file.
+
+## What makes it different
+
+- **Unique behavioral witnesses** — the only remaining test for a behavior, boundary, requirement, or failure family
+- **Counterfactual removal** — simulate deleting a test before anyone deletes it
+- **Suite health / evaluation debt** — heuristics for maintainers, not scores you can game
+- **Evidence-backed recommendations** — overlap, witness loss, and a removal verdict on every decision
+- **Portfolio optimization** — greedy + 1-opt subset under cost / time / count budgets
+- **Production failure compression** — cluster failures into candidate tests; nothing is auto-inserted
 
 ## Measured results
 
-Constructed / labeled suites. **Not** production correctness. Ground truth was not rewritten to chase scores. See [docs/benchmark.md](docs/benchmark.md).
+**Constructed / labeled benchmark** — not production accuracy. Ground truth was not rewritten to chase scores. Details: [docs/benchmark.md](docs/benchmark.md).
 
-| Metric | Value | Dataset |
-| --- | --- | --- |
-| Unique-witness precision | 1.0 | Labeled constructed suites including `benchmarks/witness_final/` |
-| Unique-witness recall | 1.0 | same |
-| Critical witness recall | 1.0 | same |
-| False critical witnesses | 0 | same |
-| Retirement safety | 1.0 | same + coding / support / shopping |
-| Critical coverage | 1.0 | same |
-| 10k cold runtime | **54.7049s** | Synthetic generator, `EVALTRIM_NO_CACHE=1` |
-| Incremental 10k / 5 changed | **2.0613s** | Pair cache already populated; empty-cache incremental was ~10.4s |
-
-Redundancy P/R/F1 on coding / customer_support / shopping constructed suites: **1.0**.
+| Metric | Value |
+| --- | --- |
+| Unique-witness precision | 1.0 |
+| Unique-witness recall | 1.0 |
+| Critical witness recall | 1.0 |
+| False critical witnesses | 0 |
+| Retirement safety | 1.0 |
+| Critical coverage | 1.0 |
+| 10k cold runtime | 54.7049s (`EVALTRIM_NO_CACHE=1`) |
+| Incremental 10k / 5 changed | 2.0613s (pair cache already populated; empty-cache ~10.4s) |
 
 ## Competitive position
 
-EvalTrim reaches **parity on the measured common evaluation dimensions** and adds an evaluation-suite intelligence layer focused on witness analysis, counterfactual maintenance, and suite optimization.
+EvalTrim reaches parity on measured common evaluation dimensions and adds a dedicated evaluation-suite intelligence layer for witness analysis, counterfactual maintenance, and suite optimization.
 
-Some competitor dimensions remain **UNMEASURED** or **NOT DIRECTLY COMPARABLE** (competitor 10k scale, live Promptfoo plugin catalogs vs detection quality, DeepEval LLM judges, EvalView GUI, hosted SaaS). UNMEASURED is not a win. NOT OFFERED is not a competitor zero.
+Some competitor dimensions remain UNMEASURED or NOT DIRECTLY COMPARABLE. That is not a win.
 
-Status: **VERIFIED PARITY ON MEASURED DIMENSIONS** — not a claim of universal superiority.
+[docs/competitive-results.md](docs/competitive-results.md)
 
-Details: [docs/competitive-results.md](docs/competitive-results.md) · [docs/competitive-methodology.md](docs/competitive-methodology.md) · [docs/limitations.md](docs/limitations.md)
+## GitHub / CI
 
-## Screenshots
-
-Generated from the current 1.0.0 CLI on `examples/demo_suite.yaml`. Not mocked numbers.
-
-### Main CLI
-
-![evaltrim analyze](docs/images/01-main-cli.svg)
-
-### Unique witness
-
-![evaltrim explain](docs/images/02-unique-witness.svg)
-
-### Counterfactual removal
-
-![simulate-remove](docs/images/03-removal-simulation.svg)
-
-### Suite health
-
-![evaltrim health](docs/images/04-suite-health.svg)
-
-### Regression
-
-![evaltrim compare](docs/images/05-regression.svg)
-
-### GitHub PR comment
-
-![analyze --format github](docs/images/06-github-pr.svg)
-
-## Architecture
-
-```
-CLI
- → Core evaluation model (records, graders, scenarios)
- → Traces / history (local SQLite)
- → Behavior graph
- → Intelligence engine (witnesses, counterfactuals, portfolio)
- → Evidence / proof graph
- → Reports / CI
+```yaml
+- uses: actions/checkout@v4
+- uses: actions/setup-python@v5
+  with: { python-version: "3.12" }
+- run: pip install .
+- run: evaltrim analyze examples/demo_suite.yaml --format github
 ```
 
-## Privacy
-
-- Local-first. No hosted backend required.
-- No telemetry by default.
-- Optional embeddings / LLM judges run only when you enable them.
-- See [docs/privacy.md](docs/privacy.md) and [docs/network.md](docs/network.md).
+Full workflow: [`.github/workflows/evaltrim.yml`](.github/workflows/evaltrim.yml)
 
 ## Installation
 
@@ -191,41 +122,37 @@ python3 -m pip install -e ".[dev]"
 evaltrim doctor
 ```
 
-Python 3.11+. Windows, macOS, and Linux. Default path is offline.
+Python 3.11+. Offline by default.
 
-## CI / GitHub Actions
+## Screenshots
 
-Workflow: [`.github/workflows/evaltrim.yml`](.github/workflows/evaltrim.yml)
+From `evaltrim` 1.0.0 on `examples/demo_suite.yaml`.
 
-```yaml
-- run: pip install .
-- run: evaltrim analyze examples/demo_suite.yaml --format github
+![analyze](docs/images/01-main-cli.svg)
+![witness](docs/images/02-unique-witness.svg)
+![removal](docs/images/03-removal-simulation.svg)
+![health](docs/images/04-suite-health.svg)
+![regression](docs/images/05-regression.svg)
+![github](docs/images/06-github-pr.svg)
+
+## Architecture
+
+```
+CLI → Evaluation model → Traces / history → Behavior graph → Intelligence → Evidence → Reports / CI
 ```
 
-The action writes artifacts and a short PR comment. EvalTrim never deletes tests from the repo.
+## Privacy / local-first
 
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Removal simulation](docs/removal-simulation.md)
-- [Evidence](docs/evidence.md)
-- [Health](docs/health.md)
-- [GitHub Action](docs/github-action.md)
-- [JSON contract](docs/json.md)
-- [Graders](docs/graders.md)
-- [Limitations](docs/limitations.md)
-- [Changelog](CHANGELOG.md)
-- [Release 1.0](docs/release-1.0.md)
-- [GitHub copy](docs/github-copy.md)
+No hosted backend. No telemetry by default. Optional LLM / embeddings only when you enable them. [docs/privacy.md](docs/privacy.md)
 
 ## Limitations
 
-- Local sandbox is **not** VM / container isolation.
-- LLM judge requires a provider you configure.
-- Some semantic matching remains a heuristic.
-- Some competitor dimensions are unmeasured.
-- No hosted SaaS.
-- No automatic deletion.
+- Local sandbox is not VM isolation
+- LLM judge is optional and provider-dependent
+- Semantic similarity remains heuristic
+- Some competitor dimensions remain UNMEASURED
+- No hosted SaaS
+- No automatic deletion
 
 ## License
 
